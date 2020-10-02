@@ -67,8 +67,12 @@ my $SomeSpaces ="                         ";
 # Array G is the Galaxy, contains elements of 3 numbers like 215 -> 2 klingons 1 base 5 stars
 my @Galaxy = (); # DIM G(8,8) in the original code
 
-# C is not clear yet
-my @C = (); # DIM C(9,2)
+# Array "C" contains the delta X and Y depending on the course
+# I know it's ugly, but since in BASIC the array starts from 1, I'm filling with zeros the useless elements
+my @C = ([0,0,0],[0,0,1],[0,-1,1],[0,-1,0],[0,-1,-1],[0,0,-1],[0,1,-1],[0,1,0],[0,1,1],[0,0,1]);
+my $i;
+my $j;
+
 my @K = (); # DIM K(3,3) - Klingons
 
 my @ExploredSpace = (); # DIM Z(8,8)	# A copy of Galaxy, but only with quadrants explored/scanned
@@ -76,7 +80,7 @@ my @ExploredSpace = (); # DIM Z(8,8)	# A copy of Galaxy, but only with quadrants
 my @DamageLevel = ();
 # here is line-370
 my $Stardate=int(rand(1)*20+20)*100;  # Stardate, numero tra 2000 e 3900 (was $T)
-my $T0=$Stardate;
+my $T0 = $Stardate;
 my $MaxNumOfDays=25+int(rand(1)*10);
 my $ShipDocked=0; # Was D0
 my $MaxEnergyLevel=3000;
@@ -99,25 +103,6 @@ my $Q2=FNR(1);		# name for this one, that generates a random number between 1 an
 
 my $S1=FNR(1);		# Coordinates of Enterprise
 my $S2=FNR(1);
-
-for ($I=1;$I<=9;$I++) {
-	$C[$I][1]=0;
-	$C[$I][2]=0;
-}
-$C[2][1]=-1;  # still havent figured it out what this is
-$C[3][1]=-1;
-$C[4][1]=-1;
-$C[4][2]=-1;
-$C[5][2]=-1;
-$C[6][2]=-1;
-
-$C[1][2]=1;
-$C[2][2]=1;
-$C[6][1]=1;
-$C[7][1]=1;
-$C[8][1]=1;
-$C[8][2]=1;
-$C[9][2]=1;
 
 for ($I=1;$I<=8;$I++) {
 	# Set Damage level to 0 for all systems
@@ -218,16 +203,18 @@ my $Q5 = 0;	# useful to see if a movement produced a change of quadrant
 
 # main loop, it goes ahead until the enterprise is destroyed or the time is over or klingons are defeated
 while (!$GameOver) {
- $StillInSameQuadrant = 1;
- $K3=0;
- $B3=0;
- $S3=0;
+	$StillInSameQuadrant = 1;
+	$K3=0;
+	$B3=0;
+	$S3=0;
  
- $ExploredSpace[$Q1][$Q2]=$Galaxy[$Q1][$Q2];	# this quadrant has been discovered
+	$ExploredSpace[$Q1][$Q2]=$Galaxy[$Q1][$Q2];	# this quadrant has been discovered
 
-# Not sure when it can happen that Q1 and Q2 are outside borders
- if ($Q1>0 && $Q1<=8 && $Q2>0 && $Q2<=8) {
-	# This part is executed only when Q1 and Q2 are inside the border of the sector
+	# The original codes check if the Enterprise is inside the borders, not sure why
+	if ($Q1<1 || $Q1>8 || $Q2<1 || $Q2>8) {
+		die "The Enterprise went outside the border of the galaxy";
+	}
+	
 	GetQuadrantName($Q1,$Q2);
 	print "\n";
 	if ($T0 == $Stardate) {
@@ -253,121 +240,113 @@ while (!$GameOver) {
 	for ($I=1;$I<=3;$I++) {
 		$K[$I][1]=0;
 		$K[$I][2]=0;
-	}
-}
-else {
-	# debug message
-	print "OUTSIDE BORDERS of QUADRANT??\n";
-}
-
-# reset klingons power
-for ($I=1;$I<=3;$I++) {
-	$K[$I][3]=0;
-}
-#$QuadString = $SomeSpaces x 7 .substr($SomeSpaces,0,17);
-$QuadString = ' ' x 192;
-
-#  POSITION ENTERPRISE IN QUADRANT, THEN PLACE "K3" KLINGONS, &
-#  "B3" STARBASES, & "S3" STARS ELSEWHERE.
-
-AddElementInQuadrantString('<*>',$S1,$S2);
-
-# IF Klingons are present
-if ($K3>0) {
-	# for each klingon ship, find a place in the quadrant
-	for ($I=1;$I<=$K3;$I++) {
-		my ($R1,$R2) = FindEmptyPlaceinQuadrant();
-		
-		AddElementInQuadrantString('+K+',$R1,$R2);
-		$K[$I][1]=$R1;  # coordinate del klingon $I
-		$K[$I][2]=$R2;
-		$K[$I][3]=$KlingonBaseEnergy*(0.5+rand(1));  # energy of the klingon
-	}
-}
-
-# IF a base is present
-if ($B3>0) {
-	my ($R1,$R2) = FindEmptyPlaceinQuadrant();
-	$B4=$R1;
-	$B5=$R2;
-	AddElementInQuadrantString('>!<',$R1,$R2);
-}
-
-# For each star
-for ($I=1;$I<=$S3;$I++) {
-	my ($R1,$R2) = FindEmptyPlaceinQuadrant();
-	AddElementInQuadrantString(' * ',$R1,$R2);
-}
-
-# this is line 1980
-ShortRangeSensorScan();
-
-# This is line-1990 - MAIN LOOP for EXECUTING COMMANDS
-# Exit when the ship enters a new quadrant
-while ($StillInSameQuadrant && !$GameOver) {
-	
-	# of there is very low total energy or shield are damaged, the game is over
-	if ($EnergyLevel+$ShieldLevel<=10 || ($EnergyLevel<=10 && $DamageLevel[7]<0)) {
-		telePrint("\n** FATAL ERROR **   YOU'VE JUST STRANDED YOUR SHIP IN SPACE");
-		telePrint("YOU HAVE INSUFFICIENT MANEUVERING ENERGY, AND SHIELD CONTROL");
-		telePrint("IS PRESENTLY INCAPABLE OF CROSS-CIRCUITING TO ENGINE ROOM!!");
-		smallDelay(2);
-		$GameOver = 1;
-		last;
+		$K[$I][3]=0;
 	}
 
-	print "COMMAND? ";
-	chomp(my $Command = <STDIN>);
-	$Command = uc($Command);
-	# This is the original algorithm, I could change it into if $command == 'NAV' etc.. but this is a smart way to do it
-	for ($I=1;$I<=9;$I++) {
-		# PARSING COMMAND STRINGS
-		if (substr($Command,0,3) eq substr($AllCommands,3*$I-3,3)) {
-			last;
+	# Clean Quadrant String
+	$QuadString = ' ' x 192;
+
+	#  POSITION ENTERPRISE IN QUADRANT, THEN PLACE "K3" KLINGONS, &
+	#  "B3" STARBASES, & "S3" STARS ELSEWHERE.
+
+	AddElementInQuadrantString('<*>',$S1,$S2);
+
+	# IF Klingons are present, for each klingon ship, find a place in the quadrant
+	if ($K3>0) {
+		for ($I=1;$I<=$K3;$I++) {
+			my ($R1,$R2) = FindEmptyPlaceinQuadrant();
+			
+			AddElementInQuadrantString('+K+',$R1,$R2);
+			$K[$I][1]=$R1;  # coordinates of Klingon ship
+			$K[$I][2]=$R2;
+			$K[$I][3]=$KlingonBaseEnergy*(0.5+rand(1));  # energy of the klingon
 		}
 	}
 
-	# Now it's a series of IF, before it was a ON I GOTO
-	if($I == 1){
-		$StillInSameQuadrant = CourseControl();
+	# If a base is present, place the base
+	if ($B3>0) {
+		my ($R1,$R2) = FindEmptyPlaceinQuadrant();
+		$B4=$R1;
+		$B5=$R2;
+		AddElementInQuadrantString('>!<',$R1,$R2);
 	}
-	elsif($I == 2){
-		ShortRangeSensorScan();
+
+	# For each star, find a place
+	for ($I=1;$I<=$S3;$I++) {
+		my ($R1,$R2) = FindEmptyPlaceinQuadrant();
+		AddElementInQuadrantString(' * ',$R1,$R2);
 	}
-	elsif($I == 3){
-		LongRangeSensorScan();
-	}
-	elsif($I == 4){
-		FirePhasers();
-	}
-	elsif($I == 5){
-		FirePhotonTorpedoes();
-	}
-	elsif($I == 6){
-		ShieldControl();
-	}
-	elsif($I == 7){
-		DamageControl();
-	}
-	elsif($I == 8){
-		LibraryComputer();
-	}
-	elsif($I == 9){
-		$GameOver = 1;
-	}
-	else {
-		print "ENTER ONE OF THE FOLLOWING:\n";
-		print "  NAV  (TO SET COURSE)\n";
-		print "  SRS  (FOR SHORT RANGE SENSOR SCAN)\n";
-		print "  LRS  (FOR LONG RANGE SENSOR SCAN)\n";
-		print "  PHA  (TO FIRE PHASERS)\n";
-		print "  TOR  (TO FIRE PHOTON TORPEDOES)\n";
-		print "  SHE  (TO RAISE OR LOWER SHIELDS)\n";
-		print "  DAM  (FOR DAMAGE CONTROL REPORTS)\n";
-		print "  COM  (TO CALL ON LIBRARY-COMPUTER)\n";
-		print "  XXX  (TO RESIGN YOUR COMMAND)\n\n";
-	}
-}  # keep asking new commands until the ship reaches a new quadrant
+
+	# this is line 1980 in the original BASIC code
+	checkIfDocked();
+	ShortRangeSensorScan();
+
+	# This is line-1990 - MAIN LOOP for EXECUTING COMMANDS
+
+	while ($StillInSameQuadrant && !$GameOver) {
+	
+		# of there is very low total energy or shield are damaged, the game is over
+		if ($EnergyLevel+$ShieldLevel<=10 || ($EnergyLevel<=10 && $DamageLevel[7]<0)) {
+			telePrint("\n** FATAL ERROR **   YOU'VE JUST STRANDED YOUR SHIP IN SPACE");
+			telePrint("YOU HAVE INSUFFICIENT MANEUVERING ENERGY, AND SHIELD CONTROL");
+			telePrint("IS PRESENTLY INCAPABLE OF CROSS-CIRCUITING TO ENGINE ROOM!!");
+			smallDelay(2);
+			$GameOver = 1;
+			last;
+		}
+
+		print "COMMAND? ";
+		chomp(my $Command = <STDIN>);
+		$Command = uc($Command);
+		# This is the original algorithm, I could change it into if $command == 'NAV' etc..
+		for ($I=1;$I<=9;$I++) {
+			# PARSING COMMAND STRINGS
+			if (substr($Command,0,3) eq substr($AllCommands,3*$I-3,3)) {
+				last;
+			}
+		}
+
+		# Now it's a series of IF, before it was a ON I GOTO
+		if($I == 1){
+			$StillInSameQuadrant = CourseControl();
+		}
+		elsif($I == 2){
+			ShortRangeSensorScan();
+		}
+		elsif($I == 3){
+			LongRangeSensorScan();
+		}
+		elsif($I == 4){
+			FirePhasers();
+		}
+		elsif($I == 5){
+			FirePhotonTorpedoes();
+		}
+		elsif($I == 6){
+			ShieldControl();
+		}
+		elsif($I == 7){
+			DamageControl();
+		}
+		elsif($I == 8){
+			LibraryComputer();
+		}
+		elsif($I == 9){
+			$GameOver = 1;
+		}
+		else {
+			print "ENTER ONE OF THE FOLLOWING:\n";
+			print "  NAV  (TO SET COURSE)\n";
+			print "  SRS  (FOR SHORT RANGE SENSOR SCAN)\n";
+			print "  LRS  (FOR LONG RANGE SENSOR SCAN)\n";
+			print "  PHA  (TO FIRE PHASERS)\n";
+			print "  TOR  (TO FIRE PHOTON TORPEDOES)\n";
+			print "  SHE  (TO RAISE OR LOWER SHIELDS)\n";
+			print "  DAM  (FOR DAMAGE CONTROL REPORTS)\n";
+			print "  COM  (TO CALL ON LIBRARY-COMPUTER)\n";
+			print "  XXX  (TO RESIGN YOUR COMMAND)\n\n";
+		}
+	}  # keep asking new commands until the ship reaches a new quadrant
 
 } # end of the main loop
 
@@ -421,15 +400,13 @@ sub KlingonsDefeated {
 
 sub DistanceOfShip {
 	# Distance between enterprise and Klingon ship
-	# D is useless, but it's important that $I has the right value
-	# It would be better if I was passed as parameter
-	# so you have to change the way it's called, now FND(1) -> changed to a parameter (Index)
 	my $Index =shift;
 	my $DX = $K[$Index][1]-$S1;
 	my $DY = $K[$Index][2]-$S2;
 	my $Distance =sqrt($DX**2 + $DY**2);   # IN PERL DONT DO THIS: N^2 !!!
 	return $Distance;
 }
+
 sub FNR {
 	# with 1, it's a random integer between 1 and 8
 	# never called with a parameter different than 1
@@ -439,28 +416,26 @@ sub FNR {
 
 sub AddElementInQuadrantString {
 	# INSERT IN STRING ARRAY FOR QUADRANT line 8670
-	# result in StrQ
+
 	my $elem = shift;
 	my $y = shift;
 	my $x = shift;
 	
-	die if (!$elem || !$y || !$x);
+	die if (!$elem || !$y || !$x || length($elem) != 3);
 	
-	# not sure why it's removing .5. If it's 7.2, int(7.2-0.5) will become 6
-	my $position = int($x-.5)*3+int($y-.5)*24+1;
-	if (length($elem) != 3) {
-		die "Wrong command";
-	}
+	$y = int($y+.5);
+	$x = int($x+.5);
+
+	my $position=($x-1)*3+($y-1)*24+1;
+	
+	# Insert the element in the right position in the quadrant string
 	if ($position == 1) {
-		#Se S8 è all'inizio, metto elem e gli ultimi 189 caratteri. Tot = 192
 		$QuadString = $elem . substr($QuadString,3);
 	}
 	elsif ($position == 190) {
-		#Se S8 è alla fine, prendo i primi 189 e poi aggiungo A. Tot = 192
 		$QuadString = substr($QuadString,0,189) . $elem;
 	}
 	else {
-		# altrimenti, es S8 = 5, prendo 4 caratteri, aggiungo A(3) e poi ci metto gli ultimi 160 caratteri. Tot 192
 		$QuadString = substr($QuadString,0,$position-1) . $elem . substr($QuadString,$position+2);
 	}
 	return;
@@ -491,7 +466,6 @@ sub SearchStringinQuadrant {
 	$y = int($y+.5);
 	$x = int($x+.5);
 
-	# need to check why the math here is different compared to AddElementInQuadrantString
 	my $position=($x-1)*3+($y-1)*24+1;
 
 	if (substr($QuadString,$position-1,3) eq $elem) {
@@ -534,45 +508,47 @@ sub GetQuadrantName {
 	}
 	return;
 }
-sub ShortRangeSensorScan {
-	# SHORT RANGE SENSOR SCAN & STARTUP SUBROUTINE
-	my $SkipNextCheck = 0;
-	for ($I=$S1-1;$I<=$S1+1;$I++) {
-		for (my $J=$S2-1;$J<=$S2+1;$J++) {
-			
-			if(int($I+.5)>=1 && int($I+.5)<=8 && int($J+.5)>=1 && int($J+.5)<=8) {
-				
-				if (SearchStringinQuadrant(">!<",$I,$J)) {	# found a starbase at coordinates I,J
+
+sub checkIfDocked {
+	
+	$ShipDocked = 0;
+	for (my $i=$S1-1;$i<=$S1+1;$i++) {
+		for (my $j=$S2-1;$j<=$S2+1;$j++) {
+			my $ii = int($i+.5);
+			my $jj = int($j+.5);
+			if ($ii>=1 and $ii<=8 and $jj>=1 and $jj<=8) {
+				if (SearchStringinQuadrant(">!<",$i,$j)) {	# found a starbase at coordinates I,J
 					$ShipDocked=1;
 					$ShipCondition="DOCKED";
 					$EnergyLevel=$MaxEnergyLevel;
 					$PhotonTorpedoes=$MaxTorpedoes;
 					telePrint("SHIELDS DROPPED FOR DOCKING PURPOSES");
 					$ShieldLevel=0;
-					# qui salterebbe i cicli per andare alla 6720
-					$SkipNextCheck = 1;
 					last;
 				}
 			}
 		}
 	}
-	
-	# Per evitare il goto che c'era sopra, ho messo la variable SkipNextCheck
-	# ma forse non e' necessaria
-	if (!$SkipNextCheck) {
-		$ShipDocked=0;
+
+	if (!$ShipDocked) {
 		if($K3>0) {
 			$ShipCondition="*RED*";
 		}
+		elsif($EnergyLevel<$MaxEnergyLevel*.1) {
+			$ShipCondition="YELLOW";
+		}
 		else {
 			$ShipCondition="GREEN";
-			if($EnergyLevel<$MaxEnergyLevel*.1) {
-				$ShipCondition="YELLOW";
-			}
 		}
 	}
+	return $ShipDocked;
+}
+
+
+sub ShortRangeSensorScan {
+	# SHORT RANGE SENSOR SCAN & STARTUP SUBROUTINE
 	
-	# qui c'era la linea 6720
+	# it was line 6720
 	if ($DamageLevel[2]<0) {
 		telePrint("\n*** SHORT RANGE SENSORS ARE OUT ***\n");
 		return;
@@ -715,11 +691,16 @@ sub CourseControl {
 
 	# REM BEGIN MOVING STARSHIP
 	AddElementInQuadrantString('   ',int($S1),int($S2));  # delete ship
-	$StepX1=$C[$Course][1]+($C[$Course+1][1]-$C[$Course][1])*($Course-int($Course));
+	
+	# When Course is an integer number, the following formula just returns $C[$Course][1]
+	$StepX1= $C[$Course][1] + ($C[$Course+1][1]-$C[$Course][1])*($Course-int($Course));
+	
+	# but when course is not integer it's taking the integer part as array index, which is crazy
+	$StepX2= $C[$Course][2] + ($C[$Course+1][2]-$C[$Course][2])*($Course-int($Course));
 	
 	$X=$S1;
 	$Y=$S2;
-	$StepX2=$C[$Course][2]+($C[$Course+1][2]-$C[$Course][2])*($Course-int($Course));
+	
 	$Q4=$Q1;
 	$Q5=$Q2;
 	for ($I=1;$I<$NoOfSteps;$I++) {
@@ -768,10 +749,9 @@ sub EndOfMovement {
 	# SEE IF DOCKED, THEN GET COMMAND
 	# goto 1980
 	# 1980 was calling Sensor Scan, then Main Commands Loop
+	checkIfDocked();
 	ShortRangeSensorScan();
 	
-	# returning 0 here is useless, after EndOfMovement
-	# the function CourseControl always returns 0, which means going to MainCommandsLoop
 	return 0;
 }
 
@@ -834,7 +814,7 @@ sub ExceededQuadrantLimits{
 	
 	if ($Stardate > $T0+$MaxNumOfDays) {
 		$GameOver = 1;
-		return 1;	# it's not important the return value here is GameOver is now true
+		return 1;
 	}
 		
 	ConsumeEnergy();
@@ -862,7 +842,7 @@ sub KlingonsAttack {
 	if ($K3<=0) {
 		return;
 	}
-	telePrint("KLINGON SHIPS ATTACK THE ENTERPRISE");
+	telePrint("KLINGON SHIPS ATTACK THE ENTERPRISE");	 # Not in the original game
 	smallDelay(1);
 	if ($ShipDocked) {
 		telePrint("STARBASE SHIELDS PROTECT THE ENTERPRISE.");
@@ -1416,21 +1396,13 @@ sub PrintDistanceAndDir {
 		}
 		elsif ($A > 0) {		# so X = 0 and A = 0
 			#$C1=5;
-			CalculateDirection($X,$A,1);  # bug fix
+			CalculateDirection($X,$A,1);
 		}
 	}
 	my $Distance = sqrt($X**2 + $A**2);
 	telePrint(" DISTANCE = ".(int($Distance*100)/100));
 
-	# checking H8 is not necessary anymore
-	# because when it's not called inside a loop
-	# it will go back to the main menu	
-	#if ($H8 == 1) {
-	#	return 0;
-	#}
-	#else {
-		return 1;
-	#}
+	return 1;
 }
 
 sub CalculateDirection {
