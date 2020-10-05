@@ -1394,7 +1394,7 @@ sub PrintDistanceAndDir {
 			#$C1=5;
 			CalculateDirection($X,$A,5);
 		}
-		elsif ($A > 0) {		# so X = 0 and A = 0
+		elsif ($A > 0) {		# so X = 0 and A > 0
 			#$C1=5;
 			CalculateDirection($X,$A,1);
 		}
@@ -1416,7 +1416,7 @@ sub CalculateDirection {
 		$Direction =$StartingCourse+(abs($n)/abs($m));
 	}
 	else {
-		$Direction =$StartingCourse+(((abs($n)-abs($m))+abs($n))/abs($n));
+		$Direction =$StartingCourse+( ( abs($n)-abs($m)+abs($n) ) /abs($n));
 	}
 	telePrint(" DIRECTION = ".(int($Direction*100)/100));
 	return 0;
