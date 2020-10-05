@@ -25,22 +25,24 @@ use warnings;
 # *** BY USING "?" INSTEAD OF "PRINT" WHEN ENTERING LINES
 # ***
 # *************************************************************
-# *** Converted to Perl By Emanuele Bolognesi - v0.9 Sep 2020
+# *** Perl Conversion By Emanuele Bolognesi - v1.0 Oct 2020
 # ***
-# *** The main bug fix is the number of starbases listed
-# *** at the beginning of the game, now it's correct.
+# *** The main bug fixes are the number of starbases listed
+# *** at the beginning of the game, and the phaser accuracy
+# *** correctly affected by computer damage, not shields
 # *** I also added instructions and indication of the course.
-# *** Some of the variable names have been changed.
-# *** All math functions and all the rest have been converted
-# *** faithfully, including possible bugs.
+# *** A lot of comments regarding programming choices and
+# *** and possible future improvements/bug fixes
+# *** The "look & feel" should be exactly the same, apart from 
+# *** a few additional messages that I added
 # *** I will continue updating and improving this code, without
 # *** changing the original game mechanics.
-# ***
+# *** 
 # *** Comments in uppercase are the original comments, lowercase
 # *** are mine.
 # ***
 # *** My blog: http://emabolo.com/
-# *** Github:  https://github.com/ebolognesi
+# *** Github:  https://github.com/emabolo
 # ***
 # *************************************************************
 
@@ -49,7 +51,6 @@ AskForInstructions();
 # the original 1978 BASIC code does not have instructions
 # there is another BASIC program. I copied it here. If you don't want it, you
 # can simply comment the line above
-
 
 BeginningOfGame:
 print "\n\n\n\n\n\n";
@@ -194,7 +195,6 @@ $I=rand(1);
 my ($X,$Y,$StepX1,$StepX2,$WarpFactor,$NoOfSteps);	# global vars used by several functions related to movement of ship
 my $QuadString;
 my $QuadrantName; # Name of the quadrant (was G2)
-my $StillInSameQuadrant;
 my $GameOver = 0;
 
 my $Q4 = 0;	# this will contain the coordinate of previous quadrant
@@ -203,7 +203,7 @@ my $Q5 = 0;	# useful to see if a movement produced a change of quadrant
 
 # main loop, it goes ahead until the enterprise is destroyed or the time is over or klingons are defeated
 while (!$GameOver) {
-	$StillInSameQuadrant = 1;
+
 	$K3=0;
 	$B3=0;
 	$S3=0;
@@ -215,7 +215,7 @@ while (!$GameOver) {
 		die "The Enterprise went outside the border of the galaxy";
 	}
 	
-	GetQuadrantName($Q1,$Q2);
+	$QuadrantName = GetQuadrantName($Q1,$Q2);
 	print "\n";
 	if ($T0 == $Stardate) {
 		telePrint("YOUR MISSION BEGINS WITH YOUR STARSHIP LOCATED");
@@ -280,10 +280,12 @@ while (!$GameOver) {
 	# this is line 1980 in the original BASIC code
 	checkIfDocked();
 	ShortRangeSensorScan();
+	
+	my $ReachedNewQuadrant = 0;
 
 	# This is line-1990 - MAIN LOOP for EXECUTING COMMANDS
 
-	while ($StillInSameQuadrant && !$GameOver) {
+	while (!$ReachedNewQuadrant && !$GameOver) {
 	
 		# of there is very low total energy or shield are damaged, the game is over
 		if ($EnergyLevel+$ShieldLevel<=10 || ($EnergyLevel<=10 && $DamageLevel[7]<0)) {
@@ -298,40 +300,32 @@ while (!$GameOver) {
 		print "COMMAND? ";
 		chomp(my $Command = <STDIN>);
 		$Command = uc($Command);
-		# This is the original algorithm, I could change it into if $command == 'NAV' etc..
-		for ($I=1;$I<=9;$I++) {
-			# PARSING COMMAND STRINGS
-			if (substr($Command,0,3) eq substr($AllCommands,3*$I-3,3)) {
-				last;
-			}
+		
+		if($Command eq "NAV"){
+			$ReachedNewQuadrant = CourseControl();
 		}
-
-		# Now it's a series of IF, before it was a ON I GOTO
-		if($I == 1){
-			$StillInSameQuadrant = CourseControl();
-		}
-		elsif($I == 2){
+		elsif($Command eq "SRS"){
 			ShortRangeSensorScan();
 		}
-		elsif($I == 3){
+		elsif($Command eq "LRS"){
 			LongRangeSensorScan();
 		}
-		elsif($I == 4){
+		elsif($Command eq "PHA"){
 			FirePhasers();
 		}
-		elsif($I == 5){
+		elsif($Command eq "TOR"){
 			FirePhotonTorpedoes();
 		}
-		elsif($I == 6){
+		elsif($Command eq "SHE"){
 			ShieldControl();
 		}
-		elsif($I == 7){
+		elsif($Command eq "DAM"){
 			DamageControl();
 		}
-		elsif($I == 8){
+		elsif($Command eq "COM"){
 			LibraryComputer();
 		}
-		elsif($I == 9){
+		elsif($Command eq "XXX"){
 			$GameOver = 1;
 		}
 		else {
@@ -353,15 +347,13 @@ while (!$GameOver) {
 
 #6210 REM END OF GAME
 print "\n";
-telePrint("IT IS STARDATE ".(int($Stardate*10)*.1));
-
+telePrint("IT IS STARDATE ".roundTo($Stardate,1));
 
 # this was line 6270
 if ($TotalKlingonShips>0) {			# IF was not in the original code, added to be more generic
 	telePrint("THERE WERE $TotalKlingonShips KLINGON BATTLE CRUISERS LEFT AT");
 	telePrint("THE END OF YOUR MISSION.");
 	print "\n";
-	smallDelay(2);
 }
 	
 # This condition does not make sense. You can restart the game only if
@@ -384,34 +376,9 @@ exit;
 
 # ============================================
 
-sub EnterpriseDestroyed {
-	telePrint("\nTHE ENTERPRISE HAS BEEN DESTROYED.  THEN FEDERATION WILL BE CONQUERED.");
-	smallDelay(2);
-	return;
-}
-
-sub KlingonsDefeated {
-	telePrint("\nCONGRATULATIONS, CAPTAIN!  THEN LAST KLINGON BATTLE CRUISER");
-	telePrint("MENACING THE FEDERATION HAS BEEN DESTROYED.");
-	telePrint("\nYOUR EFFICIENCY RATING IS " . int(1000*($InitialKlingonShips/($Stardate-$T0))**2));
-	return;
-}
-
-
-sub DistanceOfShip {
-	# Distance between enterprise and Klingon ship
-	my $Index =shift;
-	my $DX = $K[$Index][1]-$S1;
-	my $DY = $K[$Index][2]-$S2;
-	my $Distance =sqrt($DX**2 + $DY**2);   # IN PERL DONT DO THIS: N^2 !!!
-	return $Distance;
-}
-
 sub FNR {
-	# with 1, it's a random integer between 1 and 8
-	# never called with a parameter different than 1
-	my $R = shift;
-	return int(rand($R)*7.98+1.01);
+	# the original code is int(rand()*7.98+1.01)
+	return int(rand(8)+1);
 }
 
 sub AddElementInQuadrantString {
@@ -423,10 +390,9 @@ sub AddElementInQuadrantString {
 	
 	die if (!$elem || !$y || !$x || length($elem) != 3);
 	
-	$y = int($y+.5);
-	$x = int($x+.5);
-
-	my $position=($x-1)*3+($y-1)*24+1;
+	$y = int($y-.5);
+	$x = int($x-.5);
+	my $position=$x*3+$y*24+1;
 	
 	# Insert the element in the right position in the quadrant string
 	if ($position == 1) {
@@ -439,6 +405,25 @@ sub AddElementInQuadrantString {
 		$QuadString = substr($QuadString,0,$position-1) . $elem . substr($QuadString,$position+2);
 	}
 	return;
+}
+
+
+sub SearchStringinQuadrant {
+	# STRING COMPARISON IN QUADRANT ARRAY - line 8830
+
+	my $elem = shift;
+	my $y = shift;
+	my $x = shift;
+	die if (!$elem || !$y || !$x);
+
+	$y = int($y-.5);
+	$x = int($x-.5);
+	my $position=$x*3+$y*24+1;
+
+	if (substr($QuadString,$position-1,3) eq $elem) {
+		return 1;
+	}
+	return 0;
 }
 
 sub FindEmptyPlaceinQuadrant {
@@ -455,24 +440,6 @@ sub FindEmptyPlaceinQuadrant {
 	return ($y,$x);
 }
 
-sub SearchStringinQuadrant {
-	# STRING COMPARISON IN QUADRANT ARRAY - line 8830
-
-	my $elem = shift;
-	my $y = shift;
-	my $x = shift;
-	die if (!$elem || !$y || !$x);
-
-	$y = int($y+.5);
-	$x = int($x+.5);
-
-	my $position=($x-1)*3+($y-1)*24+1;
-
-	if (substr($QuadString,$position-1,3) eq $elem) {
-		return 1;
-	}
-	return 0;
-}
 
 sub GetQuadrantName {
 	my $Z4 = shift;
@@ -506,11 +473,25 @@ sub GetQuadrantName {
 			$QuadrantName.=" IV";
 		}
 	}
-	return;
+	return $QuadrantName;
+}
+
+sub CheckShipStatus {
+	if ($ShipDocked) {
+		return 'DOCKED';
+	}
+	elsif ($K3>0) {
+		return "*RED*";
+	}
+	elsif ($EnergyLevel < ($MaxEnergyLevel/10) ) {
+		return "YELLOW";
+	}
+	else {
+		return "GREEN";
+	}
 }
 
 sub checkIfDocked {
-	
 	$ShipDocked = 0;
 	for (my $i=$S1-1;$i<=$S1+1;$i++) {
 		for (my $j=$S2-1;$j<=$S2+1;$j++) {
@@ -530,17 +511,7 @@ sub checkIfDocked {
 		}
 	}
 
-	if (!$ShipDocked) {
-		if($K3>0) {
-			$ShipCondition="*RED*";
-		}
-		elsif($EnergyLevel<$MaxEnergyLevel*.1) {
-			$ShipCondition="YELLOW";
-		}
-		else {
-			$ShipCondition="GREEN";
-		}
-	}
+	$ShipCondition= CheckShipStatus();
 	return $ShipDocked;
 }
 
@@ -573,323 +544,6 @@ sub ShortRangeSensorScan {
 	return;
 }
 
-# COURSE CONTROL BEGINS HERE - line 2290
-
-sub ShowDirections {
-	print "\n";
-	print '      4  3  2   '."\n";
-	print '       \ | /    '."\n";
-	print '        \|/     '."\n";
-	print '    5 ---*--- 1 '."\n";
-	print '        /|\     '."\n";
-	print '       / | \    '."\n";
-	print '      6  7  8   '."\n";
-	print "\n";
-}
-
-sub CourseControl {
-	
-	ShowDirections();	# the original BASIC code does not show this, comment if you want
-
-	print "COURSE (0-9) :";
-	my $Course = <>;
-	chomp($Course);
-	return 1 if ($Course !~ /^\d$/ && $Course !~ /^\d\.\d+$/); #check that the course is correct
-	
-	$Course = 1 if ($Course==9);
-	if ($Course<1 or $Course>9) {
-		telePrint("   LT. SULU REPORTS, 'INCORRECT COURSE DATA, SIR!'");
-		return 1;
-	}
-	my $MaxWarp = "8";
-	$MaxWarp = "0.2" if ($DamageLevel[1]<0);
-	print "WARP FACTOR (0-$MaxWarp)? ";
-	chomp($WarpFactor = <>);
-	return 1 if ($WarpFactor !~ /^\d$/ && $WarpFactor !~ /^\d\.\d+$/); #check that the speed is correct
-	
-	if ($DamageLevel[1]<0 && $WarpFactor > .2) {
-		telePrint("WARP ENGINES ARE DAMAGED.  MAXIMUM SPEED = WARP 0.2");
-		return 1;
-	}
-	if ($WarpFactor == 0) {
-		# Speed 0 does not make sense
-		return 1;
-	}
-	elsif($WarpFactor<0 || $WarpFactor>8) {
-		telePrint("   CHIEF ENGINEER SCOTT REPORTS 'THE ENGINES WON'T TAKE WARP $WarpFactor !");
-		return 1;
-	}
-	
-	$NoOfSteps =int($WarpFactor*8+.5);	# Energy consumed by warp (formerly $N) Number of steps of movement
-	if ($EnergyLevel < $NoOfSteps) {
-		telePrint("ENGINEERING REPORTS   'INSUFFICIENT ENERGY AVAILABLE");
-		telePrint("                       FOR MANEUVERING AT WARP $WarpFactor !'");
-		
-		# it's possible to deviate energy from shields to warp
-		if ($ShieldLevel >= ($NoOfSteps - $EnergyLevel) && $DamageLevel[7]>=0) {
-			telePrint("DEFLECTOR CONTROL ROOM ACKNOWLEDGES $ShieldLevel UNITS OF ENERGY");
-			telePrint("                         PRESENTLY DEPLOYED TO SHIELDS.");
-		}
-		return 1;
-	}
-	# If Energy is enough, go ahead
-	
-	#2580 REM KLINGONS MOVE/FIRE ON MOVING STARSHIP . . .
-	for ($I=1;$I<=$K3;$I++) {
-		if ($K[$I][3] != 0) {
-			AddElementInQuadrantString('   ',$K[$I][1],$K[$I][2]);  # delete ship in current position
-			my ($R1,$R2) = FindEmptyPlaceinQuadrant();  			# returns a new position in R1,R2
-			$K[$I][1]=$R1;
-			$K[$I][2]=$R2;
-			AddElementInQuadrantString('+K+',$R1,$R2);  # put ship in the new position
-		}
-	}
-	if (KlingonsAttack()) {
-		# if KlingonsAttack returns 1, the Enterprise has been destroyed
-		return 0;
-	}
-	my $D1=0;
-	my $D6=$WarpFactor;
-	if ($WarpFactor>=1) {
-		$D6=1;
-	}
-
-	# For all systems of the ship
-	my $devIndex = 0;
-	for ($I=1;$I<=8;$I++) {
-		if ($DamageLevel[$I]>=0) {
-			next;
-		}
-		
-		$DamageLevel[$I]=$DamageLevel[$I]+$D6;
-		if ($DamageLevel[$I]>-.1 && $DamageLevel[$I] < 0) {
-			$DamageLevel[$I] =-.1;
-			next;
-		}
-		if ($DamageLevel[$I]<0) {
-			next;
-		}
-
-		if ($D1 != 1) {
-			$D1=1;
-			print "DAMAGE CONTROL REPORT: '";
-		}
-		$devIndex=$I;
-		telePrint(DeviceName($devIndex)." REPAIR COMPLETED.'");
-	}
-	if (rand(1)<=.2) {
-		$devIndex=FNR(1);
-		if (rand(1)>=.6) {
-			$DamageLevel[$devIndex]=$DamageLevel[$devIndex]+rand(1)*3+1;
-			telePrint("DAMAGE CONTROL REPORT: '".DeviceName($devIndex)." STATE OF REPAIR IMPROVED.'");
-		}
-		else {
-			$DamageLevel[$devIndex]=$DamageLevel[$devIndex]-(rand(1)*5+1);
-			telePrint("DAMAGE CONTROL REPORT: '".DeviceName($devIndex)." DAMAGED.'");
-		}
-	}
-
-	# REM BEGIN MOVING STARSHIP
-	AddElementInQuadrantString('   ',int($S1),int($S2));  # delete ship
-	
-	# When Course is an integer number, the following formula just returns $C[$Course][1]
-	$StepX1= $C[$Course][1] + ($C[$Course+1][1]-$C[$Course][1])*($Course-int($Course));
-	
-	# but when course is not integer it's taking the integer part as array index, which is crazy
-	$StepX2= $C[$Course][2] + ($C[$Course+1][2]-$C[$Course][2])*($Course-int($Course));
-	
-	$X=$S1;
-	$Y=$S2;
-	
-	$Q4=$Q1;
-	$Q5=$Q2;
-	for ($I=1;$I<$NoOfSteps;$I++) {
-		$S1=$S1+$StepX1;
-		$S2=$S2+$StepX2;
-		
-		if ($S1<1 || $S1>8 || $S2<1 || $S2>8) {
-			# EXCEEDED QUADRANT LIMITS
-			return ExceededQuadrantLimits();
-			# if returns 0, is like going to line 1320 - otherwise 1980
-		}
-		# Calc the position of the starship inside the Quadrant String (1-190)
-		my $position=int($S1)*24+int($S2)*3-26;
-		if (substr($QuadString,$position-1,2) ne "  ") {
-			# if space is NOT empty
-			# Go back to previous position and exit loop
-			$S1=int($S1-$StepX1);
-			$S2=int($S2-$StepX2);
-			telePrint("WARP ENGINES SHUT DOWN AT");
-			telePrint("SECTOR $S1 , $S2 DUE TO BAD NAVIGATION.");
-			last;
-		}
-	}
-	# not sure why INT it's necessary
-	$S1=int($S1);
-	$S2=int($S2);
-	EndOfMovement();
-	return 1;   # still in the same quadrant
-}
-
-sub EndOfMovement {
-#   aka this is line-3370
-	AddElementInQuadrantString('<*>',int($S1),int($S2));
-	ConsumeEnergy();
-	my $DayIncrement=1;
-
-	if ($WarpFactor<1) {
-		$DayIncrement = .1*int(10*$WarpFactor);
-	}
-	$Stardate=$Stardate+$DayIncrement;
-	if ($Stardate > $T0+$MaxNumOfDays) {
-		$GameOver = 1;
-		return 1;
-	}
-
-	# SEE IF DOCKED, THEN GET COMMAND
-	# goto 1980
-	# 1980 was calling Sensor Scan, then Main Commands Loop
-	checkIfDocked();
-	ShortRangeSensorScan();
-	
-	return 0;
-}
-
-sub ExceededQuadrantLimits{
-	# EXCEEDED QUADRANT LIMITS
-	$X=8*$Q1+$X+$NoOfSteps*$StepX1;
-	$Y=8*$Q2+$Y+$NoOfSteps*$StepX2;
-	$Q1=int($X/8);
-	$Q2=int($Y/8);
-	$S1=int($X-$Q1*8);
-	$S2=int($Y-$Q2*8);
-
-	if ($S1 == 0) {
-		$Q1=$Q1-1;
-		$S1=8;
-	}
-	if ($S2==0) {
-		$Q2=$Q2-1;
-		$S2=8;
-	}
-	my $CrossingPerimeter = 0;
-	if($Q1<1) {
-		$CrossingPerimeter=1;
-		$Q1=1;
-		$S1=1;
-	}
-	if ($Q1>8) {
-		$CrossingPerimeter=1;
-		$Q1=8;
-		$S1=8;
-	}
-	if($Q2<1) {
-		$CrossingPerimeter=1;
-		$Q2=1;
-		$S2=1;
-	}
-	if($Q2>8) {
-		$CrossingPerimeter=1;
-		$Q2=8;
-		$S2=8;
-	}
-	if($CrossingPerimeter>0) {
-		telePrint("LT. UHURA REPORTS MESSAGE FROM STARFLEET COMMAND:");
-		telePrint("  'PERMISSION TO ATTEMPT CROSSING OF GALACTIC PERIMETER");
-		telePrint("  IS HEREBY *DENIED*.  SHUT DOWN YOUR ENGINES.'");
-		telePrint("CHIEF ENGINEER SCOTT REPORTS  'WARP ENGINES SHUT DOWN");
-		telePrint("  AT SECTOR $S1 , $S2 OF QUADRANT $Q1 , $Q2'");
-	}
-	# this is 3860
-
-	if($Q1*8+$Q2 == $Q4*8+$Q5) {   # Quadrant not changed - this could have been (Q1 == Q4 && Q2 == Q5)
-		EndOfMovement();
-		# by returning 1 with ExceededQuadrantLimits, also CourseControl returns 1,
-		# which means it does not restart the quadrant
-		return 1;
-	}
-	
-	# If arrived here, it means we reached a new quadrant, so time advances by 1
-	$Stardate=$Stardate+1;
-	
-	if ($Stardate > $T0+$MaxNumOfDays) {
-		$GameOver = 1;
-		return 1;
-	}
-		
-	ConsumeEnergy();
-	# No more in the same quadrant, this will end the inner main loop
-	return 0;
-}
-
-sub ConsumeEnergy {
-	#MANEUVER ENERGY S/R **
-	$EnergyLevel=$EnergyLevel-$NoOfSteps-10;  # a warp speed of 8 consumes 8x8+10 =74 energy, speed 1 instead 1x8+10 =18
-	if($EnergyLevel>=0) {
-		return;
-	}
-	telePrint("SHIELD CONTROL SUPPLIES ENERGY TO COMPLETE THE MANEUVER.");
-	$ShieldLevel=$ShieldLevel+$EnergyLevel;
-	$EnergyLevel=0;
-	if($ShieldLevel<=0) {
-		$ShieldLevel=0;
-	}
-	return;
-}
-
-sub KlingonsAttack {
-	# this was line-6000
-	if ($K3<=0) {
-		return;
-	}
-	telePrint("KLINGON SHIPS ATTACK THE ENTERPRISE");	 # Not in the original game
-	smallDelay(1);
-	if ($ShipDocked) {
-		telePrint("STARBASE SHIELDS PROTECT THE ENTERPRISE.");
-		return;
-	}
-	for ($I=1;$I<=3;$I++) {
-		my $KlingonEnergy = $K[$I][3];
-		if ($KlingonEnergy<=0) {
-			next;
-		}
-		my $Hits = int(($KlingonEnergy/DistanceOfShip($I))*(2+rand(1))+1);
-		$ShieldLevel = $ShieldLevel-$Hits;
-		$K[$I][3] = $KlingonEnergy/(3+rand(0));
-		telePrint("$Hits UNIT HIT ON ENTERPRISE FROM SECTOR ".$K[$I][1].",".$K[$I][2]);
-		if($ShieldLevel<0) {
-			EnterpriseDestroyed();
-			$GameOver = 1;
-			return 1;
-		}
-		telePrint("      <SHIELDS DOWN TO $ShieldLevel UNITS>");
-		smallDelay(1);
-		if($Hits<20) {
-			next;
-		}
-		if ($ShieldLevel>0) {
-			if(rand(1)>.6 || ($Hits/$ShieldLevel) <= 0.02) {
-				next;
-			}
-		}
-		my $SysDamaged=FNR(1);
-		$DamageLevel[$SysDamaged]= $DamageLevel[$SysDamaged] - ($Hits/$ShieldLevel) - (0.5 * rand(1));
-		telePrint("DAMAGE CONTROL REPORTS '".DeviceName($SysDamaged)." DAMAGED BY THE HIT'");
-	}
-	return 0;
-}
-
-
-# REM PRINTS DEVICE NAME - 8790
-sub DeviceName {
-	# This was placing the device name in variable G2
-	my $sys = shift;
-	my @names = ("WARP ENGINES","SHORT RANGE SENSORS","LONG RANGE SENSORS","PHASER CONTROL","PHOTON TUBES",
-	"DAMAGE CONTROL","SHIELD CONTROL","LIBRARY-COMPUTER");
-	
-	return $names[$sys-1];
-}
-
 
 sub LongRangeSensorScan {
 	# LONG RANGE SENSOR SCAN CODE
@@ -903,7 +557,7 @@ sub LongRangeSensorScan {
 	my $Header="-------------------";
 	telePrint($Header);
 	for ($I=$Q1-1;$I<=$Q1+1;$I++) {
-		$N[1]=-1;
+		$N[1]=-1;	# if it's not a positive number later, it means the quadrant does not exist
 		$N[2]=-2;
 		$N[3]=-3;
 		for ($J=$Q2-1;$J<=$Q2+1;$J++) {
@@ -915,207 +569,17 @@ sub LongRangeSensorScan {
 		for(my $idx=1;$idx<=3;$idx++) {
 			print ": ";
 			if ($N[$idx]<0) {
-				print "*** "; #goto 4230
+				print "*** ";
 			}
 			else {
 				my $strdollar = $N[$idx]+1000;
-				print substr($strdollar,-3)." "; #right string
+				print substr($strdollar,-3)." ";
 			}
 		}
 		telePrint(":");
 		telePrint($Header);
 	}
 	return 0; # goto 1990
-}
-
-
-sub FirePhasers {
-	# formerly line 4260 REM PHASER CONTROL CODE BEGINS HERE
-	if ($DamageLevel[4]<0) {
-		telePrint("PHASERS INOPERATIVE");
-		return 0;
-	}
-	if ($K3<1) {
-		telePrint("SCIENCE OFFICER SPOCK REPORTS  'SENSORS SHOW NO ENEMY SHIPS");
-		telePrint("                                IN THIS QUADRANT'");
-		return 0;
-	}
-	if($DamageLevel[8]<0) {
-		telePrint("COMPUTER FAILURE HAMPERS ACCURACY");
-	}
-	print "PHASERS LOCKED ON TARGET;  ";
-	my $Units;
-	do {
-		print "ENERGY AVAILABLE = $EnergyLevel UNITS\n";
-		print "NUMBER OF UNITS TO FIRE? ";
-		chomp($Units = <>);
-		return 0 if ($Units !~ /^\d+$/ || $Units == 0);
-	} until ($Units <= $EnergyLevel);
-	
-	$EnergyLevel=$EnergyLevel-$Units;
-	if($DamageLevel[7]<0) {
-		$Units = $Units*rand(1);
-	}
-	my $H1=int($Units/$K3);   # all the phasers energy is splitted among the enemy ships
-	
-	for ($I=1;$I<=3;$I++) {
-		my $KlingonEnergy = $K[$I][3];
-		if ($KlingonEnergy >0) {
-			my $distance = DistanceOfShip($I);
-			my $distanceRatio = $H1/$distance;
-			my $randNumb = rand(1)+2;
-			my $HitPoints=int($distanceRatio*$randNumb);
-			
-			if ($HitPoints <= (.15*$KlingonEnergy)) {
-				telePrint("SENSORS SHOW NO DAMAGE TO ENEMY $I AT ".$K[$I][1].",".$K[$I][2],0.5);
-				next;
-			}
-			$K[$I][3]=$K[$I][3]-$HitPoints;
-			telePrint("$HitPoints UNIT HIT ON KLINGON $I AT SECTOR ".$K[$I][1].",".$K[$I][2]);
-			if ($K[$I][3] > 0) {
-				telePrint("   (SENSORS SHOW ".int($K[$I][3])." UNITS REMAINING)");
-				smallDelay(1);
-				next;
-			}
-			telePrint("*** KLINGON DESTROYED ***");
-			smallDelay(1);
-			
-			$K3=$K3-1;
-			$TotalKlingonShips=$TotalKlingonShips-1;
-			
-			AddElementInQuadrantString('   ',$K[$I][1],$K[$I][2]);  # Delete klingon ship from screen
-			$K[$I][3]=0;   # isnt it already 0 ?
-			$Galaxy[$Q1][$Q2]=$Galaxy[$Q1][$Q2]-100;			# Delete klingon ship from galaxy array
-			$ExploredSpace[$Q1][$Q2]=$Galaxy[$Q1][$Q2];			# clear also explored galaxy
-			
-			if($TotalKlingonShips <= 0) {
-				KlingonsDefeated();
-				$GameOver = 1;
-				return 1;
-			}
-		}
-	}
-	KlingonsAttack();
-	return 0;
-}
-
-#4690 REM PHOTON TORPEDO CODE BEGINS HERE
-sub FirePhotonTorpedoes {
-	if ($PhotonTorpedoes<=0) {
-		telePrint("ALL PHOTON TORPEDOES EXPENDED.");
-		smallDelay(2);
-		return 0;
-	}
-	if ($DamageLevel[5]<0) {
-		telePrint("PHOTON TUBES ARE NOT OPERATIONAL.");
-		smallDelay(2);
-		return 0;
-	}
-	
-	print "PHOTON TORPEDO COURSE (1-9)? ";
-	my $Course = <>;
-	chomp($Course);
-	return 0 if ($Course !~ /^\d$/ && $Course !~ /^\d\.\d+$/); #check that the course is correct
-	$Course = 1 if ($Course==9);
-	if ($Course<0.1 || $Course>9) {
-		telePrint("ENSIGN CHEKOV REPORTS,  'INCORRECT COURSE DATA, SIR!'");
-		return 0;
-	}
-
-	$EnergyLevel=$EnergyLevel-2;
-	$PhotonTorpedoes=$PhotonTorpedoes-1;
-	
-	$StepX1=$C[$Course][1]+($C[$Course+1][1]-$C[$Course][1])*($Course-int($Course));
-	$StepX2=$C[$Course][2]+($C[$Course+1][2]-$C[$Course][2])*($Course-int($Course));
-	
-	$X=$S1;  # these are probably local variables but better to keep like that
-	$Y=$S2;
-	telePrint("TORPEDO TRACK:");
-	# this is line 4920
-	# Introducing a loop for the torpedo path
-	while (1) {
-		$X=$X+$StepX1;
-		$Y=$Y+$StepX2;
-		my $X3=int($X+.5);
-		my $Y3=int($Y+.5);
-		
-		if ($X3<1 || $X3>8 || $Y3<1 || $Y3>8) {
-			# torpedo is out of borders
-			telePrint("TORPEDO MISSED!");
-			smallDelay(2);
-			last;
-		}
-		
-		telePrint("               ".$X3." , ".$Y3,0.5);
-		if (SearchStringinQuadrant("   ",$X,$Y)) {
-			# found white space, continue and go to next iteration of loop
-			next;
-		}
-		
-		if (SearchStringinQuadrant("+K+",$X,$Y)) {
-			# found a klingon at coordinates X, Y
-			telePrint("*** KLINGON DESTROYED ***");
-			smallDelay(1);
-			$K3=$K3-1;
-			$TotalKlingonShips=$TotalKlingonShips-1;
-			if ($TotalKlingonShips<=0) {
-				KlingonsDefeated();
-				$GameOver = 1;
-				return 1;
-			}
-			# Check which Klingon has been destroyed
-			for ($I=1;$I<=3;$I++) {
-				if ($X3 == $K[$I][1] && $Y3 == $K[$I][2]) {
-					$K[$I][3]=0;  # this flow is a bit changed compared to the original BASIC
-					last;         # last only the for loop, not the DO . When it exits the for loop, $I contains the index of the klingon hit
-				}
-			}
-			AddElementInQuadrantString('   ',$X,$Y);  			# remove klingon
-			$Galaxy[$Q1][$Q2]=$K3*100+$B3*10+$S3;				# update galaxy 
-			$ExploredSpace[$Q1][$Q2]=$Galaxy[$Q1][$Q2];			# update explored galaxy
-			last;
-		}
-			
-		# It was not a Klingon, checking if I hit a star
-		if (SearchStringinQuadrant(" * ",$X,$Y)) {
-			# found a Star
-			telePrint("STAR AT ".$X3.",".$Y3." ABSORBED TORPEDO ENERGY.");
-			smallDelay(2);
-			last;
-		}
-		# Check if I hit a starbase
-		if (SearchStringinQuadrant(">!<",$X,$Y)) {
-			# found a starbase
-			telePrint("*** STARBASE DESTROYED ***");
-			$B3=$B3-1;
-			$TotalStarbases=$TotalStarbases-1;
-			if ($TotalStarbases>0 || $TotalKlingonShips>$Stardate-$T0-$MaxNumOfDays)	{
-				telePrint("STARFLEET COMMAND REVIEWING YOUR RECORD TO CONSIDER");
-				telePrint("COURT MARTIAL!");
-				smallDelay(2);
-				$ShipDocked=0;	# if docked, no more docked - but what if I was docked to another base?
-				last;
-			}
-			else {
-				telePrint("THAT DOES IT, CAPTAIN!!  YOU ARE HEREBY RELIEVED OF COMMAND");
-				telePrint("AND SENTENCED TO 99 STARDATES AT HARD LABOR ON CYGNUS 12!!");
-				smallDelay(2);
-				$GameOver = 1;
-				return 1;
-			}
-		}
-		else {
-			# If the space was not empty, and I didnt hit a star, nor a base, or a klingon
-			# what else could have happened?
-			# in the original code, it asks again to enter the course
-			# here I just print a message to see if this can really happen
-			print "An unknown object has been hit\n";
-			last;
-		}
-	}
-	
-	KlingonsAttack();
-	return 0;
 }
 
 
@@ -1129,38 +593,87 @@ sub ShieldControl {
 	print "NUMBER OF UNITS TO SHIELDS? ";
 	my $Units;
 	chomp($Units = <>);
-	if ($Units<0 || $ShieldLevel == $Units) {
-		telePrint("<SHIELDS UNCHANGED>");
-		return 0;
+	
+	if ($Units !~ /^\d+$/) {
+		telePrint("INCORRECT VALUE");
 	}
-	if ($Units > $EnergyLevel+$ShieldLevel) {
+	elsif ($ShieldLevel == $Units) {
+		telePrint("<SHIELDS UNCHANGED>");
+	}
+	elsif ($Units > $EnergyLevel+$ShieldLevel) {
 		telePrint("SHIELD CONTROL REPORTS  'THIS IS NOT THE FEDERATION TREASURY.'");
 		telePrint("<SHIELDS UNCHANGED>");
-		return 0;
 	}
-	$EnergyLevel=$EnergyLevel+$ShieldLevel-$Units;
-	$ShieldLevel=$Units;
-	telePrint("DEFLECTOR CONTROL ROOM REPORT:");
-	telePrint("  'SHIELDS NOW AT ".$ShieldLevel." UNITS PER YOUR COMMAND.'");
-	return 0;
+	else {
+		$EnergyLevel=$EnergyLevel+$ShieldLevel-$Units;
+		$ShieldLevel=$Units;
+		telePrint("DEFLECTOR CONTROL ROOM REPORT:");
+		telePrint("  'SHIELDS NOW AT ".$ShieldLevel." UNITS PER YOUR COMMAND.'");
+	}
+	return $Units;
 }
+
+# REM PRINTS DEVICE NAME - 8790
+sub deviceName {
+	# This was placing the device name in variable G2
+	my $sys = shift;
+	my @names = ("WARP ENGINES","SHORT RANGE SENSORS","LONG RANGE SENSORS","PHASER CONTROL","PHOTON TUBES",
+	"DAMAGE CONTROL","SHIELD CONTROL","LIBRARY-COMPUTER");
+	
+	return $names[$sys-1];
+}
+
+sub roundTo {
+	my $value = shift;
+	my $precision = shift;
+	
+	return int($value) if (!$precision);
+	
+	$precision = (10 ** $precision);
+	$value = int($value*$precision);
+	return $value/$precision;
+}
+
+sub formatWithSpaces {
+	my $str = shift;
+	my $maxlength = shift;
+	my $centered = shift;
+	
+	my $final = "";
+	if($centered) {
+		my $numsp = int(($maxlength-length($str))/2);
+		my $spaces = ' ' x $numsp;
+		$final = $spaces.$str.$spaces;
+		if (length($final) < $maxlength) {
+			$final = $final.' ';
+		}
+	}
+	else {
+		my $spaces = " " x ($maxlength-length($str));
+		$final = $str . $spaces;
+	}
+	return $final;
+}
+
 
 sub DamageControl {
 	#5680 REM DAMAGE CONTROL - 5690
 	if ($DamageLevel[6]>=0) {
 		telePrint("\nDEVICE             STATE OF REPAIR");
 		for (my $index=1;$index<=8;$index++) {
-			# print with alignment of spaces
-			telePrint(DeviceName($index). ' '.substr($SomeSpaces,0,25-length(DeviceName($index))).' '.int($DamageLevel[$index]*100)*.01);
+			my $tabs = 27;
+			if ($DamageLevel[$index]<0) {
+				$tabs=26;
+			}
+			telePrint(formatWithSpaces(deviceName($index),$tabs) . roundTo($DamageLevel[$index],2));
 		}
-		print "\n";
-
 	}
 	else {
 		telePrint("DAMAGE CONTROL REPORT NOT AVAILABLE");
 	}
-
-	# Repairs are possible only with the ship docked
+	print "\n";
+	
+	# By checking the status, you can also ask to repair, if docked
 	if ($ShipDocked) {
 		# 5720
 		my $TimeToRepair=0;
@@ -1174,12 +687,12 @@ sub DamageControl {
 		}
 		print "\n";
 		
-		my $D4=rand(1)*0.5;   						#  this was at the beginning of the code, but D4 is used here only
-		$TimeToRepair=$TimeToRepair+$D4;
-		if ($TimeToRepair>=1) {$TimeToRepair=0.9;}	# never more than 1 day
+		$TimeToRepair=roundTo($TimeToRepair+rand(0.5),2);
+		
+		if ($TimeToRepair>0.9) {$TimeToRepair=0.9;}	# never more than 1 day
 		
 		telePrint("TECHNICIANS STANDING BY TO EFFECT REPAIRS TO YOUR SHIP;");
-		telePrint("ESTIMATED TIME TO REPAIR: ".(0.01*int(100*$TimeToRepair))." STARDATES");	# reduce the number to 2 decimals
+		telePrint("ESTIMATED TIME TO REPAIR: $TimeToRepair STARDATES");
 		print "WILL YOU AUTHORIZE THE REPAIR ORDER (Y/N) ? ";
 		chomp(my $YesNo = <>);
 		if ($YesNo eq "Y") {
@@ -1188,12 +701,199 @@ sub DamageControl {
 					$DamageLevel[$I]=0;
 				}
 			}
-			$Stardate=$Stardate+$TimeToRepair+0.1;		# In case it's 0.9, it will become 1
+			$Stardate=$Stardate+$TimeToRepair+0.1;		# never trust engineers!
 			telePrint("REPAIR COMPLETED.");
 		}
 	}
-
 	return 0;
+}
+
+
+sub CalcAndPrintDirection {
+	my $m = shift;  # X
+	my $n = shift;  # A
+	my $StartingCourse = shift;  # c1
+	
+	my $Direction;
+#8290
+	if (abs($m) > abs($n)) {  
+		$Direction =$StartingCourse+(abs($n)/abs($m));
+	}
+	else {
+		$Direction =$StartingCourse+( ( abs($n)-abs($m)+abs($n) ) /abs($n));
+	}
+	telePrint(" DIRECTION = ".roundTo($Direction,2));
+	return 0;
+}
+
+
+sub PrintDistanceAndDirection {
+	my $W1 = shift;
+	my $X = shift;
+	my $C1 = shift;
+	my $A = shift;
+
+	$X=$X-$A;
+	$A=$C1-$W1;
+	if ($X<0) {
+		if($A>0) {
+			CalcAndPrintDirection($A,$X,3);	# A>0 and X < 0
+		}
+		elsif($X != 0) {   					# else would be enough here (X<0 and A <=0)
+			CalcAndPrintDirection($X,$A,5);
+		}
+	}
+	else {
+		if ($A<0) {							# case X>= 0 and A < 0
+			CalcAndPrintDirection($A,$X,7);
+		}
+		elsif($X>0) {						# the only case where this is not true is X = 0
+			CalcAndPrintDirection($X,$A,1);
+		}
+		elsif ($A==0) {						# so X = 0 and A = 0
+			CalcAndPrintDirection($X,$A,5);
+		}
+		elsif ($A > 0) {					# so X = 0 and A > 0
+			CalcAndPrintDirection($X,$A,1);
+		}
+	}
+	my $Distance = sqrt($X**2 + $A**2);
+	telePrint(" DISTANCE = ".roundTo($Distance,2));
+
+	return 1;
+}
+
+
+sub PrintComputerRecord {
+	my $GalaxyMapOn = shift;
+
+	telePrint("       1     2     3     4     5     6     7     8");
+	telePrint("     ----- ----- ----- ----- ----- ----- ----- -----");
+
+	for ($I=1;$I<=8;$I++) {
+		print $I.'  ';
+		if ($GalaxyMapOn) {
+			$QuadrantName = GetQuadrantName($I,1,'RegionOnly');
+			print '  '.formatWithSpaces($QuadrantName,23,1);
+			$QuadrantName = GetQuadrantName($I,5,'RegionOnly');
+			print ' '.formatWithSpaces($QuadrantName,23,1);
+		}
+		else {
+			for ($J=1;$J<=8;$J++) {
+				print "   ";
+				if ($ExploredSpace[$I][$J]==0) { 
+					print "***";
+				}
+				else {
+					my $string = $ExploredSpace[$I][$J]+1000;
+					print substr($string,-3);
+				}
+			}
+		}
+		
+		print "\n";
+		telePrint("     ----- ----- ----- ----- ----- ----- ----- -----");
+	}
+	print "\n";
+	return 0;
+}
+
+
+sub GalaxyMap {
+	#7390 REM SETUP TO CHANGE CUM GAL RECORD TO GALAXY MAP
+	telePrint("                        THE GALAXY"); # GOTO7550
+	PrintComputerRecord(1);
+	return 1;
+}
+
+sub ComulativeGalacticRecord {
+	telePrint("       COMPUTER RECORD OF GALAXY FOR QUADRANT $Q1,$Q2\n");
+	PrintComputerRecord(0);
+	return 1;
+}
+
+sub StatusReport {
+	#7890 REM STATUS REPORT - 7900
+	telePrint("   STATUS REPORT:");
+	my $Ss="";
+	if ($TotalKlingonShips>1) {$Ss="S";}
+	telePrint("KLINGON".$Ss." LEFT: ".$TotalKlingonShips);
+	telePrint("MISSION MUST BE COMPLETED IN ".roundTo($T0+$MaxNumOfDays-$Stardate,1)." STARDATES");
+	$Ss="S";
+	if($TotalStarbases<2) {$Ss='';}
+
+	if($TotalStarbases<1) {
+		telePrint("YOUR STUPIDITY HAS LEFT YOU ON YOUR ON IN");
+		telePrint("  THE GALAXY -- YOU HAVE NO STARBASES LEFT!");
+	}
+	else {
+		telePrint("THE FEDERATION IS MAINTAINING ".$TotalStarbases." STARBASE".$Ss." IN THE GALAXY");
+	}
+	DamageControl();
+	return 1;
+}
+
+
+sub PhotonTorpedoData{
+	#8060 REM TORPEDO, BASE NAV, D/D CALCULATOR
+	if($K3<=0) {
+		telePrint("SCIENCE OFFICER SPOCK REPORTS  'SENSORS SHOW NO ENEMY SHIPS");
+		telePrint("                                IN THIS QUADRANT'");
+		return 1;
+	}
+	$Ss="";
+	if ($K3>1) {
+		$Ss="S";
+	}
+	telePrint("FROM ENTERPRISE TO KLINGON BATTLE CRUISER".$Ss.":");
+
+	for ($I=1;$I<=3;$I++) {
+		if ($K[$I][3]>0) {
+			PrintDistanceAndDirection($K[$I][1],$K[$I][2],$S1,$S2);
+		}
+	}
+	return 1;
+}
+
+sub validCoord{
+	my $n = shift;
+	if ($n>=1 && $n<=8) {
+		return 1;
+	}
+	return 0;
+}
+
+sub DistanceCalculator {
+	telePrint("DIRECTION/DISTANCE CALCULATOR:");
+	print "YOU ARE AT QUADRANT $Q1,$Q2 SECTOR $S1,$S2\n";
+	print "PLEASE ENTER INITIAL COORDINATES (X,Y): ";
+	chomp(my $Coord = <>);
+	my ($y1,$x1) = split(/,/,$Coord,2);
+	
+	print "  FINAL COORDINATES (X,Y): ";
+	chomp($Coord = <>);
+	my ($y2,$x2) = split(/,/,$Coord,2);
+	
+	if (validCoord($x1) && validCoord($y1) && validCoord($x2) && validCoord($y2)) {
+		PrintDistanceAndDirection($y2,$x2,$y1,$x1);
+		return 1;
+	}
+	else {
+		telePrint("WRONG COORDINATES");
+		return 0;
+	}
+}
+
+sub StarbaseNavData {
+	if ($B3 > 0) {
+		telePrint("FROM ENTERPRISE TO STARBASE:");
+		PrintDistanceAndDirection($B4,$B5,$S1,$S2);   # dest, origin
+	}
+	else {
+		telePrint("MR. SPOCK REPORTS,  'SENSORS SHOW NO STARBASES IN THIS");
+		telePrint(" QUADRANT.'");
+	}
+	return 1;
 }
 
 
@@ -1243,207 +943,580 @@ sub LibraryComputer {
 	return 0;
 }
 
-sub GalaxyMap {
-	#7390 REM SETUP TO CHANGE CUM GAL RECORD TO GALAXY MAP
-	telePrint("                        THE GALAXY"); # GOTO7550
-	PrintComputerRecord(1);
-	return 1;
+sub EnterpriseDestroyed {
+	telePrint("\nTHE ENTERPRISE HAS BEEN DESTROYED.  THEN FEDERATION WILL BE CONQUERED.");
+	smallDelay(2);
+	return;
 }
 
-sub ComulativeGalacticRecord {
-	#7530 REM CUM GALACTIC RECORD
-	#7540 REM INPUT"DO YOU WANT A HARDCOPY? IS THE TTY ON (Y/N)";$X - this was already commented
-	#7542 REM IF$X="Y"THENPOKE1229,2:POKE1237,3:NULL1 - this was already commented
-	telePrint("       COMPUTER RECORD OF GALAXY FOR QUADRANT $Q1,$Q2\n");
-	PrintComputerRecord(0);
-	return 1;
+sub KlingonsDefeated {
+	telePrint("\nCONGRATULATIONS, CAPTAIN!  THEN LAST KLINGON BATTLE CRUISER");
+	telePrint("MENACING THE FEDERATION HAS BEEN DESTROYED.");
+	telePrint("\nYOUR EFFICIENCY RATING IS " . int(1000*($InitialKlingonShips/($Stardate-$T0))**2));
+	return;
 }
 
-# Approximation of the BASIC function PRINT TAB()
-sub PrintTab {
-	my $numOfspaces = shift;
-	return ' ' x $numOfspaces;
+
+sub DistanceOfShip {
+	# Distance between enterprise and Klingon ship
+	my $Index =shift;
+	my $DX = $K[$Index][1]-$S1;
+	my $DY = $K[$Index][2]-$S2;
+	return sqrt($DX**2 + $DY**2);   # IN PERL DONT DO THIS: N^2 !!!
 }
 
-sub PrintComputerRecord {
-	my $GalaxyMapOn = shift;
-	telePrint("       1     2     3     4     5     6     7     8");
-	my $Header="     ----- ----- ----- ----- ----- ----- ----- -----";
-	telePrint($Header);
-	for ($I=1;$I<=8;$I++) {
-		print $I.'  ';
-		if ($GalaxyMapOn) {
-			GetQuadrantName($I,1,'RegionOnly');
-			my $tab = (23 - length($QuadrantName))/2;
-			my $str = PrintTab($tab).$QuadrantName.PrintTab($tab);
-			print '  '.$str;
-			if (length($str)<23) {print ' ';}
-			GetQuadrantName($I,5,'RegionOnly');
-			$tab = (23 - length($QuadrantName))/2;
-			print ' '.PrintTab($tab).$QuadrantName;
-		}
-		else {
-			for ($J=1;$J<=8;$J++) {
-				print "   ";
-				if ($ExploredSpace[$I][$J]==0) { 
-					print "***";
-				}
-				else {
-					my $string = $ExploredSpace[$I][$J]+1000;
-					print substr($string,-3);
-				}
+
+sub KlingonsAttack {
+	# this was line-6000
+	if ($K3<=0) {
+		return 0;
+	}
+	telePrint("KLINGON SHIPS ATTACK THE ENTERPRISE",1);	 # This message is not in the original game
+
+	if ($ShipDocked) {
+		telePrint("STARBASE SHIELDS PROTECT THE ENTERPRISE.");
+		return 0;
+	}
+	
+	for ($I=1;$I<=3;$I++) {
+		my $KlingonEnergy = $K[$I][3];
+		if ($KlingonEnergy>0) {
+			my $Hits = int(($KlingonEnergy/DistanceOfShip($I))*(2+rand(1))+1);
+			$ShieldLevel = $ShieldLevel-$Hits;
+			
+			# The choice below is strange. Energy of the klingon decrease when they fire
+			# but it does not depend on the power used by the phasers
+			# also it decreases a lot, because it can become 1/3 or 1/4 of the previous energy
+			# would be better to use an algorithm similar to the one used for the Enterprise
+			# Basically they are committing suicide
+			
+			$K[$I][3] = $KlingonEnergy/(3+rand(1));
+			
+			telePrint("$Hits UNIT HIT ON ENTERPRISE FROM SECTOR ".$K[$I][1].",".$K[$I][2]);
+			if($ShieldLevel<0) {
+				EnterpriseDestroyed();
+				$GameOver = 1;
+				return 1;
+			}
+			telePrint("      <SHIELDS DOWN TO $ShieldLevel UNITS>",1);
+			
+			if ($Hits>19 && ($ShieldLevel==0 || (rand(1)<.6 && ($Hits/$ShieldLevel) > 0.02)) ) {
+				my $SysDamaged=FNR(1);
+				$DamageLevel[$SysDamaged] = $DamageLevel[$SysDamaged] - ($Hits/$ShieldLevel) - (0.5 * rand(1));
+				telePrint("DAMAGE CONTROL REPORTS '".deviceName($SysDamaged)." DAMAGED BY THE HIT'");	
 			}
 		}
-		
-		print "\n";
-		telePrint($Header);
 	}
-	print "\n";
 	return 0;
 }
 
-sub StatusReport {
-	#7890 REM STATUS REPORT - 7900
-	telePrint("   STATUS REPORT:");
-	my $Ss="";
-	if ($TotalKlingonShips>1) {$Ss="S";}
-	telePrint("KLINGON".$Ss." LEFT: ".$TotalKlingonShips);
-	telePrint("MISSION MUST BE COMPLETED IN ".int(0.1*int(($T0+$MaxNumOfDays-$Stardate)*10))." STARDATES");
-	$Ss="S";
-	if($TotalStarbases<2) {$Ss='';}
 
-	if($TotalStarbases<1) {
-		telePrint("YOUR STUPIDITY HAS LEFT YOU ON YOUR ON IN");
-		telePrint("  THE GALAXY -- YOU HAVE NO STARBASES LEFT!");
+#4690 REM PHOTON TORPEDO CODE BEGINS HERE
+sub FirePhotonTorpedoes {
+	if ($PhotonTorpedoes<=0) {
+		telePrint("ALL PHOTON TORPEDOES EXPENDED.",2);
+		return 0;
 	}
-	else {
-		telePrint("THE FEDERATION IS MAINTAINING ".$TotalStarbases." STARBASE".$Ss." IN THE GALAXY");
+	if ($DamageLevel[5]<0) {
+		telePrint("PHOTON TUBES ARE NOT OPERATIONAL.",2);
+		return 0;
 	}
-	DamageControl();
+	
+	print "PHOTON TORPEDO COURSE (1-9)? ";
+	my $Course = <>;
+	chomp($Course);
+	return 0 if ($Course !~ /^\d$/ && $Course !~ /^\d\.\d+$/); #check that the course is correct
+	$Course = 1 if ($Course==9);
+	if ($Course<0.1 || $Course>9) {
+		telePrint("ENSIGN CHEKOV REPORTS,  'INCORRECT COURSE DATA, SIR!'");
+		return 0;
+	}
+
+	$EnergyLevel=$EnergyLevel-2;
+	$PhotonTorpedoes=$PhotonTorpedoes-1;
+	
+	my $cindex = int($Course);	# this is not present in BASIC. Also in Perl is not necessary
+	
+	$StepX1=$C[$cindex][1]+($C[$cindex+1][1]-$C[$cindex][1])*($Course-$cindex);
+	$StepX2=$C[$cindex][2]+($C[$cindex+1][2]-$C[$cindex][2])*($Course-$cindex);
+	
+	my $X=$S1;  # torpedoes starting coordinates = Enterprise coordinates
+	my $Y=$S2;
+	telePrint("TORPEDO TRACK:");
+	
+	# this is line 4920
+	
+	my $KlingonDestroyed = 0;
+	
+	while (1) {
+		$X=$X+$StepX1;
+		$Y=$Y+$StepX2;
+		my $X3=int($X+.5);
+		my $Y3=int($Y+.5);
+		
+		if ($X3<1 || $X3>8 || $Y3<1 || $Y3>8) {
+			# torpedo is out of borders
+			telePrint("TORPEDO MISSED!",2);
+			last;
+		}
+		
+		telePrint("               ".$X3." , ".$Y3,0.5);
+		if (SearchStringinQuadrant("   ",$X,$Y)) {
+			# found white space, continue and go to next iteration of loop
+		}
+		elsif (SearchStringinQuadrant("+K+",$X,$Y)) {
+			# found a klingon at coordinates X, Y
+			telePrint("*** KLINGON DESTROYED ***",1);
+			$K3=$K3-1;
+			$ShipCondition = CheckShipStatus();		# could become GREEN if there are no more klingons
+			
+			$TotalKlingonShips=$TotalKlingonShips-1;			
+			if ($TotalKlingonShips<=0) {
+				KlingonsDefeated();
+				$GameOver = 1;
+				return 1;
+			}
+			# Check which Klingon has been destroyed
+			for ($I=1;$I<=3;$I++) {
+				if ($X3 == $K[$I][1] && $Y3 == $K[$I][2]) {
+					$K[$I][3]=0;
+					$KlingonDestroyed = $I;
+				}
+			}
+			AddElementInQuadrantString('   ',$X,$Y);  			# remove klingon
+			$Galaxy[$Q1][$Q2]=$K3*100+$B3*10+$S3;				# update galaxy 
+			$ExploredSpace[$Q1][$Q2]=$Galaxy[$Q1][$Q2];			# update explored galaxy
+			last;
+		}
+		elsif (SearchStringinQuadrant(" * ",$X,$Y)) {
+			# It was not a Klingon, checking if I hit a star
+			telePrint("STAR AT ".$X3.",".$Y3." ABSORBED TORPEDO ENERGY.",1);
+			last;
+		}
+		# Check if I hit a starbase
+		elsif (SearchStringinQuadrant(">!<",$X,$Y)) {
+			# found a starbase
+			telePrint("*** STARBASE DESTROYED ***");
+			$B3=$B3-1;
+			$TotalStarbases=$TotalStarbases-1;
+			if ($TotalStarbases>0 || $TotalKlingonShips>$Stardate-$T0-$MaxNumOfDays)	{
+				telePrint("STARFLEET COMMAND REVIEWING YOUR RECORD TO CONSIDER");
+				telePrint("COURT MARTIAL!");
+				smallDelay(2);
+				$ShipDocked=0;	# if docked, no more docked - but what if I was docked to another base?
+
+				AddElementInQuadrantString('   ',$X,$Y);  	# remove base
+				$Galaxy[$Q1][$Q2]=$K3*100+$B3*10+$S3;		# update galaxy 
+				$ExploredSpace[$Q1][$Q2]=$Galaxy[$Q1][$Q2];
+				last;
+			}
+			else {
+				telePrint("THAT DOES IT, CAPTAIN!!  YOU ARE HEREBY RELIEVED OF COMMAND");
+				telePrint("AND SENTENCED TO 99 STARDATES AT HARD LABOR ON CYGNUS 12!!");
+				smallDelay(2);
+				$GameOver = 1;
+				return 1;
+			}
+		}
+		else {
+			# If the space was not empty, and I didnt hit a star, nor a base, or a klingon
+			# what else could have happened?
+			# in the original code, it asks again to enter the course
+			# here I just print a message to see if this can really happen
+			telePrint("An unknown object has been hit");
+			last;
+		}
+	}
+	
+	KlingonsAttack();
 	return 1;
 }
 
-sub PhotonTorpedoData{
-	#8060 REM TORPEDO, BASE NAV, D/D CALCULATOR
-	if($K3<=0) {
+
+sub FirePhasers {
+	# formerly line 4260 REM PHASER CONTROL CODE BEGINS HERE
+	if ($DamageLevel[4]<0) {
+		telePrint("PHASERS INOPERATIVE");
+		return 0;
+	}
+	if ($K3<1) {
 		telePrint("SCIENCE OFFICER SPOCK REPORTS  'SENSORS SHOW NO ENEMY SHIPS");
 		telePrint("                                IN THIS QUADRANT'");
 		return 0;
 	}
-	$Ss="";
-	if ($K3>1) {
-		$Ss="S";
+	if($DamageLevel[8]<0) {
+		telePrint("COMPUTER FAILURE HAMPERS ACCURACY");
 	}
-	telePrint("FROM ENTERPRISE TO KLINGON BATTLE CRUISER".$Ss.":");
-
+	print "PHASERS LOCKED ON TARGET;  ";
+	my $Units;
+	do {
+		print "ENERGY AVAILABLE = $EnergyLevel UNITS\n";
+		print "NUMBER OF UNITS TO FIRE? ";
+		chomp($Units = <>);
+		return 0 if ($Units !~ /^\d+$/ || $Units == 0);
+	} until ($Units <= $EnergyLevel);
+	
+	$EnergyLevel=$EnergyLevel-$Units;
+	
+	if($DamageLevel[8]<0) {			# when computer is broken, the risk is to waste energy
+		$Units = $Units*rand(1);	# the original code has a bug, it checks shield damage not computer damage
+	}
+	my $H1=int($Units/$K3);   # all the phasers energy is splitted among the enemy ships
+	
 	for ($I=1;$I<=3;$I++) {
-		if ($K[$I][3]>0) {
-			PrintDistanceAndDir($K[$I][1],$K[$I][2],$S1,$S2);
-		}
-	}
-	return 1;
-}
+		my $KlingonEnergy = $K[$I][3];
+		if ($KlingonEnergy >0) {
+			my $distance = DistanceOfShip($I);
+			my $distanceRatio = $H1/$distance;		# damage is inversely proportional to distance
+			my $randNumb = rand(1)+2;				# but a random factor can increse damage up to x2
+			my $HitPoints=int($distanceRatio*$randNumb);
+			
+			if ($HitPoints <= (.15*$KlingonEnergy)) {
+				telePrint("SENSORS SHOW NO DAMAGE TO ENEMY $I AT ".$K[$I][1].",".$K[$I][2],0.5);
+				$HitPoints = 0;
+			}
+			else {
+				$K[$I][3]=$K[$I][3]-$HitPoints;
+				telePrint("$HitPoints UNIT HIT ON KLINGON $I AT SECTOR ".$K[$I][1].",".$K[$I][2]);
+			}
+			
+			if ($K[$I][3] > 0) {
+				telePrint("   (SENSORS SHOW ".int($K[$I][3])." UNITS REMAINING)",1);
+			}
+			else {
+				telePrint("*** KLINGON DESTROYED ***",1);
+				$K3=$K3-1;
+				$ShipCondition = CheckShipStatus();
+				$TotalKlingonShips=$TotalKlingonShips-1;
+				
+				if($TotalKlingonShips <= 0) {
+					KlingonsDefeated();
+					$GameOver = 1;
+					return 1;
+				}
+			
+				AddElementInQuadrantString('   ',$K[$I][1],$K[$I][2]);  # Delete klingon ship from screen
+				$K[$I][3]=0;   # isnt it already 0 ?
+				$Galaxy[$Q1][$Q2]=$Galaxy[$Q1][$Q2]-100;			# Delete klingon ship from galaxy array
+				$ExploredSpace[$Q1][$Q2]=$Galaxy[$Q1][$Q2];			# clear also explored galaxy
+			}
 
-sub DistanceCalculator {
-	telePrint("DIRECTION/DISTANCE CALCULATOR:");
-	print "YOU ARE AT QUADRANT $Q1,$Q2 SECTOR $S1,$S2\n";
-	print "PLEASE ENTER INITIAL COORDINATES (X,Y): ";
-	chomp(my $Coord = <>);
-	my ($y1,$x1) = split(/,/,$Coord,2);
-	
-	print "  FINAL COORDINATES (X,Y): ";
-	chomp($Coord = <>);
-	my ($y2,$x2) = split(/,/,$Coord,2);
-	
-	if (!$x1 || !$y1 || !$x2 || !$y2) {
-		telePrint("WRONG COORDINATES");
-		return 0;
-	}
-	PrintDistanceAndDir($y2,$x2,$y1,$x1);
-	return 1;
-}
-
-sub PrintDistanceAndDir {
-	my $W1 = shift;
-	my $X = shift;
-	my $C1 = shift;
-	my $A = shift;
-
-	$X=$X-$A;
-	$A=$C1-$W1;
-	if ($X<0) {
-		if($A>0) {
-			#$C1=3;
-			CalculateDirection($A,$X,3);
-		}
-		elsif($X != 0) {   # This can be just ELSE x < 0 and a <= 0
-			#$C1=5;
-			CalculateDirection($X,$A,5);
 		}
 	}
-	else {
-		if ($A<0) {			# case X>= 0 and A < 0
-			#$C1=7;
-			CalculateDirection($A,$X,7);
-		}
-		elsif($X>0) {		# the only case where this is not true is X = 0
-			#$C1=1;
-			CalculateDirection($X,$A,1);
-		}
-		elsif ($A==0) {		# so X = 0 and A = 0
-			#$C1=5;
-			CalculateDirection($X,$A,5);
-		}
-		elsif ($A > 0) {		# so X = 0 and A > 0
-			#$C1=5;
-			CalculateDirection($X,$A,1);
-		}
-	}
-	my $Distance = sqrt($X**2 + $A**2);
-	telePrint(" DISTANCE = ".(int($Distance*100)/100));
-
-	return 1;
-}
-
-sub CalculateDirection {
-	my $m = shift;  # X
-	my $n = shift;  # A
-	my $StartingCourse = shift;  # c1
-	
-	my $Direction;
-#8290
-	if (abs($m) > abs($n)) {  
-		$Direction =$StartingCourse+(abs($n)/abs($m));
-	}
-	else {
-		$Direction =$StartingCourse+( ( abs($n)-abs($m)+abs($n) ) /abs($n));
-	}
-	telePrint(" DIRECTION = ".(int($Direction*100)/100));
+	KlingonsAttack();
 	return 0;
 }
 
-sub StarbaseNavData {
-	if ($B3 > 0) {
-		telePrint("FROM ENTERPRISE TO STARBASE:");
-		PrintDistanceAndDir($B4,$B5,$S1,$S2);   # dest, origin
+sub ShowDirections {
+	print "\n";
+	print '      4  3  2   '."\n";
+	print '       \ | /    '."\n";
+	print '        \|/     '."\n";
+	print '    5 ---*--- 1 '."\n";
+	print '        /|\     '."\n";
+	print '       / | \    '."\n";
+	print '      6  7  8   '."\n";
+	print "\n";
+}
+
+sub ConsumeEnergy {
+	#MANEUVER ENERGY S/R **
+	$EnergyLevel=$EnergyLevel-$NoOfSteps-10;  # a warp speed of 8 consumes 8x8+10 =74 energy, speed 1 instead 1x8+10 =18
+	if($EnergyLevel>=0) {
+		return $EnergyLevel;
 	}
-	else {
-		telePrint("MR. SPOCK REPORTS,  'SENSORS SHOW NO STARBASES IN THIS");
-		telePrint(" QUADRANT.'");
+	telePrint("SHIELD CONTROL SUPPLIES ENERGY TO COMPLETE THE MANEUVER.");
+	$ShieldLevel=$ShieldLevel+$EnergyLevel;
+	$EnergyLevel=0;
+	if($ShieldLevel<=0) {
+		$ShieldLevel=0;
 	}
+	return $EnergyLevel;
+}
+
+
+sub EndOfMovementInQuadrant {
+	#  this is line-3370
+	#  These are the last operations done before end of the turn, if the Enterprise has not changed quadrant
+	AddElementInQuadrantString('<*>',int($S1),int($S2));
+	ConsumeEnergy();
+	my $DayIncrement=1;		# time advances by 1, even if you traveled at warp speed 9
+
+	if ($WarpFactor<1) {
+		$DayIncrement = roundTo($WarpFactor,1);
+	}
+	$Stardate=$Stardate+$DayIncrement;
+	if ($Stardate > $T0+$MaxNumOfDays) {
+		$GameOver = 1;
+		return 1;
+	}
+
+	checkIfDocked();
+	ShortRangeSensorScan();
+	
+	return 0;
+}
+
+
+sub ExceededQuadrantLimits{
+	# checking if quadrant has been exceeded. If it's still in the same quadrant, returns true
+
+	$X=8*$Q1+$X+$NoOfSteps*$StepX1;
+	$Y=8*$Q2+$Y+$NoOfSteps*$StepX2;
+	$Q1=int($X/8);
+	$Q2=int($Y/8);
+	$S1=int($X-$Q1*8);
+	$S2=int($Y-$Q2*8);
+
+	if ($S1 == 0) {
+		$Q1=$Q1-1;
+		$S1=8;
+	}
+	if ($S2==0) {
+		$Q2=$Q2-1;
+		$S2=8;
+	}
+	my $CrossingPerimeter = 0;
+	if($Q1<1) {
+		$CrossingPerimeter=1;
+		$Q1=1;
+		$S1=1;
+	}
+	if ($Q1>8) {
+		$CrossingPerimeter=1;
+		$Q1=8;
+		$S1=8;
+	}
+	if($Q2<1) {
+		$CrossingPerimeter=1;
+		$Q2=1;
+		$S2=1;
+	}
+	if($Q2>8) {
+		$CrossingPerimeter=1;
+		$Q2=8;
+		$S2=8;
+	}
+	if($CrossingPerimeter>0) {
+		telePrint("LT. UHURA REPORTS MESSAGE FROM STARFLEET COMMAND:");
+		telePrint("  'PERMISSION TO ATTEMPT CROSSING OF GALACTIC PERIMETER");
+		telePrint("  IS HEREBY *DENIED*.  SHUT DOWN YOUR ENGINES.'");
+		telePrint("CHIEF ENGINEER SCOTT REPORTS  'WARP ENGINES SHUT DOWN");
+		telePrint("  AT SECTOR $S1 , $S2 OF QUADRANT $Q1 , $Q2'");
+	}
+	# this is 3860
+
+	if($Q1*8+$Q2 == $Q4*8+$Q5) {
+		# Quadrant not changed - this could have been (Q1 == Q4 and Q2 == Q5)
+		# this happens only when CrossingPerimeter is true, but not vice versa
+		# I could have Crossed the perimeter after changing 1 or more quadrant
+		EndOfMovementInQuadrant();
+		# returning false means it does not restart the quadrant
+		return 0;
+	}
+	
+	# If arrived here, it means we reached a new quadrant, so time advances by 1
+	# unlike EndOfMovementInQuadrant, this is true also when the warp speed is <1, if this has moved the Enterprise
+	# to another quadrant. I think it makes sense
+	$Stardate=$Stardate+1;
+	
+	if ($Stardate > $T0+$MaxNumOfDays) {
+		$GameOver = 1;
+		return 1;
+	}
+		
+	ConsumeEnergy();
+	# No more in the same quadrant, this will end the inner main loop
 	return 1;
 }
+
+
+# COURSE CONTROL BEGINS HERE - line 2290
+
+sub CourseControl {
+	
+	ShowDirections();	# the original BASIC code does not show this, comment if you want
+	
+#	1) Ask for course and speed
+
+	print "COURSE (0-9) :";
+	my $Course = <>;
+	chomp($Course);
+	return 1 if ($Course !~ /^\d$/ && $Course !~ /^\d\.\d+$/);
+	
+	$Course = 1 if ($Course==9);
+	if ($Course<1 or $Course>9) {
+		telePrint("   LT. SULU REPORTS, 'INCORRECT COURSE DATA, SIR!'");
+		return 0;
+	}
+	
+	my $MaxWarp = "8";
+	$MaxWarp = "0.2" if ($DamageLevel[1]<0);
+	
+	$WarpFactor = -1;
+	
+	while($WarpFactor<0) {
+		print "WARP FACTOR (0-$MaxWarp)? ";
+		chomp($WarpFactor = <>);
+		$WarpFactor =-1 if ($WarpFactor !~ /^\d$/ && $WarpFactor !~ /^\d\.\d+$/);
+		
+		if ($WarpFactor == 0) {
+			#0 warp will cancel the NAV command
+			return 0;
+		}
+		if ($DamageLevel[1]<0 && $WarpFactor > .2) {
+			telePrint("WARP ENGINES ARE DAMAGED.  MAXIMUM SPEED = WARP 0.2");
+			$WarpFactor =-1;
+		}
+		elsif($WarpFactor>8) {
+			telePrint("   CHIEF ENGINEER SCOTT REPORTS 'THE ENGINES WON'T TAKE WARP $WarpFactor !");
+			$WarpFactor =-1;
+		}
+	}
+	
+	$NoOfSteps =int($WarpFactor*8+.5);	# Energy consumed by warp (formerly $N) Number of steps of movement
+	if ($EnergyLevel < $NoOfSteps) {
+		telePrint("ENGINEERING REPORTS   'INSUFFICIENT ENERGY AVAILABLE");
+		telePrint("                       FOR MANEUVERING AT WARP $WarpFactor !'");
+		
+		# it's possible to deviate energy from shields to warp
+		if ($ShieldLevel >= ($NoOfSteps - $EnergyLevel) && $DamageLevel[7]>=0) {
+			telePrint("DEFLECTOR CONTROL ROOM ACKNOWLEDGES $ShieldLevel UNITS OF ENERGY");
+			telePrint("                         PRESENTLY DEPLOYED TO SHIELDS.");
+		}
+		return 0;
+	}
+	# If Energy is enough, go ahead
+	
+#	2) Klingons move (before Enterprise moves)
+	for ($I=1;$I<=$K3;$I++) {
+		if ($K[$I][3]>0) {
+			AddElementInQuadrantString('   ',$K[$I][1],$K[$I][2]);  # delete ship in current position
+			my ($R1,$R2) = FindEmptyPlaceinQuadrant();  			# returns a new position in R1,R2
+			$K[$I][1]=$R1;
+			$K[$I][2]=$R2;
+			AddElementInQuadrantString('+K+',$R1,$R2);  # put ship in the new position
+		}
+	}
+
+# 3) Klingons fire (before Enterprise moves)
+	if (KlingonsAttack()) {
+		# if KlingonsAttack returns true, the Enterprise has been destroyed
+		# GameOver is set to true, so when CourseControl function returns, the game will end
+		return 0;
+	}
+	
+#	4) Now check if the movement will repair some Ship systems
+#	since this happens after Klingon attack, some device just broken by the klingon can get repaired, nonsense
+
+	my $RepairFactor = $WarpFactor;
+	if ($WarpFactor>=1) {
+		$RepairFactor=1;
+	}
+
+	my $devIndex = 0;
+	for ($I=1;$I<=8;$I++) {
+		if ($DamageLevel[$I]<0) {
+			$DamageLevel[$I]=$DamageLevel[$I]+$RepairFactor;	#	-- moving by 1 quadrant repair by 1
+			if ($DamageLevel[$I]>-0.1 && $DamageLevel[$I] < 0) {	#	-- if it's almost 0, goes back to -0.1
+				$DamageLevel[$I] =-.1;
+			}
+			elsif ($DamageLevel[$I]>=0) {
+				telePrint("DAMAGE CONTROL REPORT: '".deviceName($I)." REPAIR COMPLETED.'");
+			}
+		}
+	}
+
+#	5) Now check if a random system is broken or repaired
+#	In 20% of the cases, select a random system and either repair it or break it
+#	wouldn't it be better to do it in the previous loop?
+	
+	if (rand(1)<=.2) {
+		$devIndex=FNR(1);
+		if (rand(1)>=.6) {
+			# it does not make sense that a system can have damage > 0
+			# also what's the point of repairing something if it was not broken?
+			$DamageLevel[$devIndex]=$DamageLevel[$devIndex]+rand(1)*3+1;
+			telePrint("DAMAGE CONTROL REPORT: '".deviceName($devIndex)." STATE OF REPAIR IMPROVED.'");
+		}
+		else {
+			# it' possible that something that just got repaired, it's broken here, nonsense
+			$DamageLevel[$devIndex]=$DamageLevel[$devIndex]-(rand(1)*5+1);
+			telePrint("DAMAGE CONTROL REPORT: '".deviceName($devIndex)." DAMAGED.'");
+		}
+	}
+
+#	6) Finally the Enterprise can move
+	AddElementInQuadrantString('   ',int($S1),int($S2));  # delete ship
+	
+	my $cindex = int($Course);
+	
+	$StepX1= $C[$cindex][1] + ($C[$cindex+1][1]-$C[$cindex][1])*($Course-$cindex);
+	$StepX2= $C[$cindex][2] + ($C[$cindex+1][2]-$C[$cindex][2])*($Course-$cindex);
+	
+	$X=$S1;		# save previous Enterprise position
+	$Y=$S2;
+	
+	$Q4=$Q1;	# save previous Enterprise quadrant
+	$Q5=$Q2;
+	
+	for ($I=1;$I<$NoOfSteps;$I++) {
+		$S1=$S1+$StepX1;
+		$S2=$S2+$StepX2;
+
+		#-- While inside the quadrant, the Enterprise will move step by step, checking if
+		#-- it encounters an obstacle, or tries to cross the border of the quadrant
+		#-- once the border is crossed, all the rest of the movement will be performed by ExceededQuadrantLimits
+		#-- at that point, obstacles dont matter any more, all the movement will be done in one big step
+		#-- This makes sense if we consider inside quadrant Impulse Speed and once crossed, Warp speed
+		
+		if ($S1<1 || $S1>8 || $S2<1 || $S2>8) {
+			#-- EXCEEDED QUADRANT LIMITS
+			#-- This will check if Enterprise has moved to another quadrant, and will make the rest of the movements
+			#-- It's possible that the ship tried to cross border of quadrant and it stopped
+			#-- so quadrant has not changed, in this case the next function will return false
+			
+			return ExceededQuadrantLimits();
+		}
+		
+		# still in the same quadrant, so it will continue moving
+		
+		if (SearchStringinQuadrant('   ',$S1,$S2)) {
+			# ok then
+		}
+		else {
+			# if space is NOT empty
+			# Go back to previous position and exit loop
+			$S1=int($S1-$StepX1);
+			$S2=int($S2-$StepX2);
+			telePrint("WARP ENGINES SHUT DOWN AT");
+			telePrint("SECTOR $S1 , $S2 DUE TO BAD NAVIGATION.");
+			last;
+		}
+	}
+	# not sure why INT it's necessary
+	$S1=int($S1);
+	$S2=int($S2);
+	
+	EndOfMovementInQuadrant();
+	
+	return 0;   # still in the same quadrant
+}
+
+
 
 sub telePrint {
 	my $string = shift;
 	my $delay = shift;
+	
+	$delay = 0.10 if (!$delay);
 	print $string."\n";
 	smallDelay($delay);
 }
 
 sub smallDelay {
 	my $delay = shift;
-	$delay = 0.10 if (!$delay);
+	$delay = 0.15 if (!$delay);
 	select(undef, undef, undef, $delay);
 }
 
