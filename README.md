@@ -25,7 +25,7 @@ After the Perl version, I decided to convert it into LUA. Since LUA does not hav
 
 The code now is very different, but I paid attention to not change the mechanics or the math behind the game algorithm. The game should play exactly like the BASIC version.
 
-You will notice that I didn't use the normal `print`. The reason is a full speed version doesn't really offer a faithful experience. When I tried the Commodore 64 version, I noticed that the text was scrolling much slower, and there is also a small delay before the quadrant screen is rendered. So I tried to recreate this experience using a `smallDelay()` function and replacing `print` with a `telePrint()` function (telePrint prints the line and then wait a bit). If you don't like this, change `DisableTeleprint = false` into `DisableTeleprint = false`
+You will notice that I didn't use the normal `print`. The reason is a full speed version doesn't really offer a faithful experience. When I tried the Commodore 64 version, I noticed that the text was scrolling much slower, and there is also a small delay before the quadrant screen is rendered. So I tried to recreate this experience using a `smallDelay()` function and replacing `print` with a `telePrint()` function (telePrint prints the line and then wait a bit). If you don't like this, change `DisableTeleprint = false` into `DisableTeleprint = true` (or '1' for Perl version)
 
 Versions included:
 
