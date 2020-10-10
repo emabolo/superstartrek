@@ -48,6 +48,8 @@ use warnings;
 
 AskForInstructions();
 
+my $DisableTeleprint = 0;
+
 # the original 1978 BASIC code does not have instructions
 # there is another BASIC program. I copied it here. If you don't want it, you
 # can simply comment the line above
@@ -1259,7 +1261,7 @@ sub EndOfMovementInQuadrant {
 
 
 sub ExceededQuadrantLimits{
-	# checking if quadrant has been exceeded. If it's still in the same quadrant, returns true
+	# checking if quadrant has been exceeded. If it's still in the same quadrant, returns 0
 
 	$X=8*$Q1+$X+$NoOfSteps*$StepX1;
 	$Y=8*$Q2+$Y+$NoOfSteps*$StepX2;
@@ -1307,11 +1309,9 @@ sub ExceededQuadrantLimits{
 	# this is 3860
 
 	if($Q1*8+$Q2 == $Q4*8+$Q5) {
-		# Quadrant not changed - this could have been (Q1 == Q4 and Q2 == Q5)
-		# this happens only when CrossingPerimeter is true, but not vice versa
-		# I could have Crossed the perimeter after changing 1 or more quadrant
-		EndOfMovementInQuadrant();
-		# returning false means it does not restart the quadrant
+		#-- Quadrant not changed - this could have been (Q1 == Q4 and Q2 == Q5)
+		#-- this happens only when CrossingPerimeter is true, but not vice versa
+		#-- I could have Crossed the perimeter after changing 1 or more quadrant
 		return 0;
 	}
 	
@@ -1471,12 +1471,17 @@ sub CourseControl {
 		#-- This makes sense if we consider inside quadrant Impulse Speed and once crossed, Warp speed
 		
 		if ($S1<1 || $S1>8 || $S2<1 || $S2>8) {
-			#-- EXCEEDED QUADRANT LIMITS
 			#-- This will check if Enterprise has moved to another quadrant, and will make the rest of the movements
 			#-- It's possible that the ship tried to cross border of quadrant and it stopped
-			#-- so quadrant has not changed, in this case the next function will return false
-			
-			return ExceededQuadrantLimits();
+			#-- so quadrant has not changed, in this case the function will return false and loop will break
+			if (ExceededQuadrantLimits()) {
+				# movement has finished
+				return 1;
+			}
+			else {
+				# exit the "for" loop and then do EndOfMovementInQuadrant
+				last;
+			}
 		}
 		
 		# still in the same quadrant, so it will continue moving
@@ -1503,8 +1508,6 @@ sub CourseControl {
 	return 0;   # still in the same quadrant
 }
 
-
-
 sub telePrint {
 	my $string = shift;
 	my $delay = shift;
@@ -1516,6 +1519,7 @@ sub telePrint {
 
 sub smallDelay {
 	my $delay = shift;
+	return 0 if ($DisableTeleprint);
 	$delay = 0.15 if (!$delay);
 	select(undef, undef, undef, $delay);
 }

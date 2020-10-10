@@ -21,18 +21,19 @@ There are literally thousands of different versions of Super Star Trek. During t
 The first version I wrote was the Perl one. I chose Perl because it's easy and because it has "goto"s. In fact, my first attempt was mostly a 1-to-1 conversion of the original code.
 But I continued working on it for several days. In the last version, all "goto"s have disappeared, they became if-then-else blocks, loops, and functions. Once I got familiar with the code, I gave meaningful names to most of the variables. I also added a lot of comments to explain the code and highlight possible bugs or improvements.
 I also converted most of the BASIC subroutines (GOSUB), based on global vars, into functions with local vars.
-
-The code now is very different, but I paid attention to not change the mechanics or the math behind the game algorithm. The game should play exactly like the BASIC version.
 After the Perl version, I decided to convert it into LUA. Since LUA does not have a "continue" statement, only "break", I had to rewrite many blocks, but in the end the code is simpler and looks much better. I removed the "continue" (aka "next" in Perl) also from the Perl version.
 
+The code now is very different, but I paid attention to not change the mechanics or the math behind the game algorithm. The game should play exactly like the BASIC version.
+
+You will notice that I didn't use the normal `print`. The reason is a full speed version doesn't really offer a faithful experience. When I tried the Commodore 64 version, I noticed that the text was scrolling much slower, and there is also a small delay before the quadrant screen is rendered. So I tried to recreate this experience using a `smallDelay()` function and replacing `print` with a `telePrint()` function (telePrint prints the line and then wait a bit). If you don't like this, change `DisableTeleprint = false` into `DisableTeleprint = false`
+
 Versions included:
-- superstartrek-plain.pl : plain conversion from BASIC to Perl, runs at "full speed", so text is scrolling very fast. If you want to play it, you should NOT use this version, better to play the other version (I won't keep this version updated, and I will probably remove it soon)
-- superstartrek.pl : the full speed version doesn't really offer you a faithful experience. When I tried the Commodore 64 version, I noticed that the text was scrolling much slower, and there is also a small delay before the quadrant screen is rendered. I tried to recreate this experience using a `smallDelay()` function and replacing most of the `print` with a `telePrint()` function (telePrint prints the line and then wait a bit). If you want to play it, use this!
-- superstartrek.lua : exactly like the perl version, but in LUA. In the future I will continue improving this version, the Perl one will receive just major bug fixes.
+
+- superstartrek.lua : this is now the main version, I will continue improving it, while the Perl one will receive just major bug fixes;
+- superstartrek.pl : Perl is already installed on Mac, so it might be easier to try this one. At the moment the two versions are aligned. The only difference is the Perl version uses `select` for the delay, which could be a bit more precise. Also, in Perl the main code is on top, while functions are below, I find it easier to read.
 
 ## What's next
 I'm not planning to add more features. There are already plenty of enhanced/improved versions of Super Star Trek on the Internet, with all sort of additions, including Romulan ships, clocking devices, supernovae, death rays and more. Probably I'd like to improve even more the experience, not sure how. For sure I'd like to see Bones talking. Dr McCoy is the only one that never speaks.
-
 
 
 Happy startrekking!

@@ -22,7 +22,7 @@ SUPER STARTREK - MAY 16,1978 - REQUIRES 24K MEMORY
 *** BY USING "?" INSTEAD OF "PRINT" WHEN ENTERING LINES
 ***
 *************************************************************
-*** LUA Conversion by Emanuele Bolognesi - v0.3 Oct 2020
+*** LUA Conversion by Emanuele Bolognesi - v0.4 Oct 2020
 ***
 *** Comments in uppercase are the original comments, lowercase
 *** are mine.
@@ -169,13 +169,13 @@ end
 -- Utilities =============================================
 
 function FNR(r)
-	-- original function is "math.floor(rand(R)*7.98+1.01)"
-	return math.random(1,8)	-- replaced with this simple rand
+	-- original function is "math.floor(rand(1)*7.98+1.01)"
+	return math.random(1,8)	-- replaced with this simple rand, parameter r is useless
 end
 
 function smallDelay(sec)
 	sec = sec or 0.15
-    --socket.select(nil, nil, sec)
+	if DisableTeleprint then return 0 end
 	local t0 = os.clock()
 	while os.clock() - t0 <= sec do end
 end
@@ -193,10 +193,10 @@ function die (msg)
  	os.exit(1)
 end
 
-function roundTo(value,precision)
+function roundTo(val,precision)
 	precision = 10^precision
-	value = math.floor(value*precision)
-	return value/precision
+	val = math.floor(val*precision)
+	return val/precision
 end
 
 function formatWithSpaces(str,maxlength,centered)
@@ -217,10 +217,6 @@ end
 
 -- Names Utilities ===========================================================
 
-function deviceName(sys)
-	local names = {"WARP ENGINES","SHORT RANGE SENSORS","LONG RANGE SENSORS","PHASER CONTROL","PHOTON TUBES","DAMAGE CONTROL","SHIELD CONTROL","LIBRARY-COMPUTER"}
-	return names[sys]
-end
 
 function GetQuadrantName(Z4,Z5,RegionNameOnly)
 
@@ -385,7 +381,7 @@ function PrintDistanceAndDirection(x1,y1,x2,y2)
 			CalcAndPrintDirection(VD,HD,7)
 		elseif HD>0 then						-- the only case where this is not true is HD = 0
 			CalcAndPrintDirection(HD,VD,1)
-		elseif VD==0 then					-- so HD = 0 and VD = 0
+		elseif VD==0 then						-- so HD = 0 and VD = 0
 			CalcAndPrintDirection(HD,VD,5)
 		elseif VD>0 then						-- so HD = 0 and VD > 0
 			CalcAndPrintDirection(HD,VD,1)
@@ -444,7 +440,7 @@ function LongRangeSensorScan()
 	telePrint(Header)
 	
 	for i=Q1-1,Q1+1 do
-		N[1]=-1	-- every time set a negative number
+		N[1]=-1	-- set a negative number
 		N[2]=-2 -- if it's not filled later, it means the quadrant does not exist
 		N[3]=-3
 		for j=Q2-1,Q2+1 do
@@ -458,7 +454,7 @@ function LongRangeSensorScan()
 			if N[idx]<0 then
 				io.write("*** ")
 			else
-				local string = tostring(N[idx]+1000)   -- it's a way to fill the missing 0 at the beginning
+				local string = tostring(N[idx]+1000)   -- it's a way to fill the missing 0
 				io.write(string:sub(2,4)..' ')
 			end
 		end
@@ -505,10 +501,9 @@ function DamageControl()
 	if DamageLevel[6]>=0 then
 		telePrint("\nDEVICE             STATE OF REPAIR")
 		for index=1,8 do
-			-- print with alignment of spaces
 			local tabs = 27
 			if DamageLevel[index]<0 then tabs=26 end  -- for formatting
-			telePrint(formatWithSpaces(deviceName(index),tabs) .. roundTo(DamageLevel[index],2) )
+			telePrint(formatWithSpaces(DeviceNames[index],tabs) .. roundTo(DamageLevel[index],2) )
 		end
 	else
 		telePrint("DAMAGE CONTROL REPORT NOT AVAILABLE")
@@ -520,7 +515,7 @@ function DamageControl()
 		local TimeToRepair=0
 		for I=1,8 do
 			if DamageLevel[I]<0 then
-				TimeToRepair=TimeToRepair+.1;				-- Time increases for each damaged system
+				TimeToRepair=TimeToRepair+.1;	-- 1/10 day for each damaged system - regardless of the Damage level
 			end
 		end
 		if TimeToRepair==0 then
@@ -530,7 +525,7 @@ function DamageControl()
 		
 		TimeToRepair=roundTo(TimeToRepair+math.random()*0.5,2)	-- add a random factor and round to 2 decimals
 		
-		if TimeToRepair >0.9 then TimeToRepair=0.9 end -- cannot be more than 1 day
+		if TimeToRepair >0.9 then TimeToRepair=0.9 end -- time to repair cannot be more than 1 day
 		
 		telePrint("TECHNICIANS STANDING BY TO EFFECT REPAIRS TO YOUR SHIP;")
 		telePrint("ESTIMATED TIME TO REPAIR: "..TimeToRepair.." STARDATES")
@@ -764,7 +759,7 @@ function KlingonsAttack()
 			if Hits>19 and (ShieldLevel==0 or (math.random()<.6 and (Hits/ShieldLevel) > 0.02)) then
 				SysDamaged=FNR(1)
 				DamageLevel[SysDamaged]= DamageLevel[SysDamaged] - (Hits/ShieldLevel) - (0.5 * math.random())
-				telePrint("DAMAGE CONTROL REPORTS '"..deviceName(SysDamaged).." DAMAGED BY THE HIT'")
+				telePrint("DAMAGE CONTROL REPORTS '"..DeviceNames[SysDamaged].." DAMAGED BY THE HIT'")
 			end
 		end
 	end
@@ -1026,7 +1021,8 @@ end
 
 function ExceededQuadrantLimits()
 	-- EXCEEDED QUADRANT LIMITS
-	-- checking if quadrant has been exceeded. If it's still in the same quadrant, returns true
+	-- Moves the Enterprise outside the quadrant and check if limits have been exceeded
+	-- If quadrant has not changed, because the limit of the galaxy has been found, returns false
 	
 	X=8*Q1+X+NoOfSteps*StepX1
 	Y=8*Q2+Y+NoOfSteps*StepX2
@@ -1079,14 +1075,12 @@ function ExceededQuadrantLimits()
 		-- Quadrant not changed - this could have been (Q1 == Q4 and Q2 == Q5)
 		-- this happens only when CrossingPerimeter is true, but not vice versa
 		-- I could have Crossed the perimeter after changing 1 or more quadrant
-		EndOfMovementInQuadrant()
-		-- returning false means it does not restart the quadrant
 		return false
 	end
 	
-	-- If arrived here, it means we reached a new quadrant, so time advances by 1
+	-- We reached a new quadrant, so time advances by 1
 	-- unlike EndOfMovementInQuadrant, this is true also when the warp speed is <1, if this has moved the Enterprise
-	-- to another quadrant. I think it makes sense
+	-- to another quadrant. I think it makes sense that crossing the quadrant requires more time
 	Stardate=Stardate+1
 	
 	if Stardate > T0+MaxNumOfDays then
@@ -1128,8 +1122,10 @@ function CourseControl()
 		if WarpFactor == 0 then		-- 0 warp will cancel the NAV command
 			return false
 		end
-			
-		if DamageLevel[1]<0 and WarpFactor > .2 then
+		
+		if WarpFactor == nil then
+			telePrint("PLEASE ENTER A NUMBER BETWEEN 0 AND "..MaxWarp)
+		elseif DamageLevel[1]<0 and WarpFactor > .2 then
 			telePrint("WARP ENGINES ARE DAMAGED.  MAXIMUM SPEED = WARP 0.2")
 			WarpFactor = nil
 		elseif WarpFactor<0 or WarpFactor>8 then
@@ -1186,7 +1182,7 @@ function CourseControl()
 			if DamageLevel[i]>-0.1 and DamageLevel[i] < 0 then	-- if it's almost 0, goes back to -0.1
 				DamageLevel[i] =-.1
 			elseif DamageLevel[i]>=0 then
-				telePrint("DAMAGE CONTROL REPORT: '"..deviceName(i).." REPAIR COMPLETED.'")
+				telePrint("DAMAGE CONTROL REPORT: '"..DeviceNames[i].." REPAIR COMPLETED.'")
 			end
 		end
 	end
@@ -1200,11 +1196,11 @@ function CourseControl()
 			-- it does not make sense that a system can have damage > 0
 			-- also what's the point of repairing something if it was not broken?
 			DamageLevel[devIndex]=DamageLevel[devIndex]+math.random()*3+1
-			telePrint("DAMAGE CONTROL REPORT: '"..deviceName(devIndex).." STATE OF REPAIR IMPROVED.'")
+			telePrint("DAMAGE CONTROL REPORT: '"..DeviceNames[devIndex].." STATE OF REPAIR IMPROVED.'")
 		else
 			-- it' possible that something that just got repaired, it's broken here, nonsense
 			DamageLevel[devIndex]=DamageLevel[devIndex]-(math.random()*5+1)
-			telePrint("DAMAGE CONTROL REPORT: '"..deviceName(devIndex).." DAMAGED.'")
+			telePrint("DAMAGE CONTROL REPORT: '"..DeviceNames[devIndex].." DAMAGED.'")
 		end
 	end
 
@@ -1225,19 +1221,23 @@ function CourseControl()
 		S1=S1+StepX1
 		S2=S2+StepX2
 		
-		-- While inside the quadrant, the Enterprise will move step by step, checking if
-		-- it encounters an obstacle, or tries to cross the border of the quadrant
-		-- once the border is crossed, all the rest of the movement will be performed by ExceededQuadrantLimits
-		-- at that point, obstacles dont matter any more, all the movement will be done in one big step
-		-- This makes sense if we consider inside quadrant Impulse Speed and once crossed, Warp speed
+		-- While traveling inside the quadrant, the Enterprise will move step by step, checking if
+		-- it encounters an obstacle, or crosses the border of the quadrant. Once the border is crossed,
+		-- all the rest of the movement will be performed by ExceededQuadrantLimits.
+		-- At that point, obstacles don't matter any more, all the movement will be done in one big step
+		-- This makes sense: inside quadrant = Impulse Speed, outside = Warp speed
 		
 		if S1<1 or S1>8 or S2<1 or S2>8 then
-			--# EXCEEDED QUADRANT LIMITS
 			-- This will check if Enterprise has moved to another quadrant, and will make the rest of the movements
 			-- It's possible that the ship tried to cross border of quadrant and it stopped
-			-- so quadrant has not changed, in this case the next function will return false
-			
-			return ExceededQuadrantLimits()
+			-- so quadrant has not changed, in this case the function will return false and loop will break
+			if ExceededQuadrantLimits() then
+				-- movement has finished
+				return true
+			else
+				-- exit the "for" loop and then do EndOfMovementInQuadrant
+				break
+			end
 		end
 		
 		-- still in the same quadrant, so it will continue moving
@@ -1257,7 +1257,7 @@ function CourseControl()
 	S1=math.floor(S1)
 	S2=math.floor(S2)
 	
-	EndOfMovementInQuadrant()
+	EndOfMovementInQuadrant(NoOfSteps)
 	return false   -- still in the same quadrant
 end
 
@@ -1267,6 +1267,8 @@ end
 -- ************************************************************
 
 math.randomseed(os.time())
+
+DisableTeleprint = false
 
 -- COMMENT/UNCOMMENT this if you want
 --askForInstructions()
@@ -1288,6 +1290,8 @@ print [[
 
 ]]
 
+
+DeviceNames = {"WARP ENGINES","SHORT RANGE SENSORS","LONG RANGE SENSORS","PHASER CONTROL","PHOTON TUBES","DAMAGE CONTROL","SHIELD CONTROL","LIBRARY-COMPUTER"}
 
 SomeSpaces ="                         "
 
