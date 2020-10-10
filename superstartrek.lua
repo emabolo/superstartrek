@@ -905,7 +905,7 @@ function FirePhasers()
 	end
 	telePrint("PHASERS LOCKED ON TARGET;  ")
 	local Units = nil
-	while Units == nil or Units>EnergyLevel do
+	while Units == nil or Units>EnergyLevel or Units<0 do
 		telePrint("ENERGY AVAILABLE = "..EnergyLevel.." UNITS")
 		io.write("NUMBER OF UNITS TO FIRE? ")
 		Units = tonumber(io.read())
@@ -1290,7 +1290,7 @@ print [[
 
 ]]
 
-
+-- The GOSUB was initially a function, but an array it's enough to get the device name
 DeviceNames = {"WARP ENGINES","SHORT RANGE SENSORS","LONG RANGE SENSORS","PHASER CONTROL","PHOTON TUBES","DAMAGE CONTROL","SHIELD CONTROL","LIBRARY-COMPUTER"}
 
 SomeSpaces ="                         "
@@ -1391,7 +1391,7 @@ if (TotalStarbases>1) then
 	Ss0=" ARE"
 end
 
--- The function telePrint is just a 'print' with a small delay to slow down text scrolling.
+-- Star the game with a mission recap
 
 telePrint("YOUR ORDERS ARE AS FOLLOWS:")
 telePrint(" DESTROY THE "..TotalKlingonShips.." KLINGON WARSHIPS WHICH HAVE INVADED")
@@ -1410,10 +1410,8 @@ GameOver = false
 Q4 = 0 --	# this will contain the coordinate of previous quadrant
 Q5 = 0 --	# useful to see if a movement produced a change of quadrant
 
-
 -- main loop, it goes ahead until the enterprise is destroyed or the time is over or klingons are defeated
 while (not GameOver) do
-	
 	K3=0
 	B3=0
 	S3=0
