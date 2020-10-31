@@ -29,11 +29,13 @@ You will notice that I didn't use the normal `print`. The reason is a full speed
 
 Versions included:
 
-- superstartrek.lua : this is now the main version, I will continue improving it, while the Perl one will receive just major bug fixes;
-- superstartrek.pl : Perl is already installed on Mac, so it might be easier to try this one. At the moment the two versions are aligned. The only difference is the Perl version uses `select` for the delay, which could be a bit more precise. Also, in Perl the main code is on top, while functions are below, I find it easier to read.
+- **startrek-tos.lua** : an enhanced version of the LUA port, with the *voices* of the original Star Trek: The Original Series cast - [see here](https://github.com/emabolo/superstartrek/blob/master/tos-version.md) for more info;
+- **superstartrek.lua** : 100% faithful port to LUA of the 1978 BASIC version;
+- **superstartrek.pl** : this is the first version I wrote. Perl is already installed on Mac, so it might be easier to try this one if you just want to play it. Mostly aligned with the LUA version, the only difference is the Perl version uses `select` for the delay, which could be a bit more precise. Also, in Perl the main code is on top, while functions are below, I find it easier to read.
 
 ## What's next
-I'm not planning to add more features. There are already plenty of enhanced/improved versions of Super Star Trek on the Internet, with all sort of additions, including Romulan ships, clocking devices, supernovae, death rays and more. Probably I'd like to improve even more the experience, not sure how. For sure I'd like to see Bones talking. Dr McCoy is the only one that never speaks.
+startrek-tos is now my favourite version. More features are coming.
+I'm also planning to port this to Pico-8. Let's see how it goes.
 
 
 Happy startrekking!
