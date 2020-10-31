@@ -592,18 +592,17 @@ end
 function StatusReport()
 	-- #7890 REM STATUS REPORT - 7900
 	telePrint("   STATUS REPORT:")
-	Ss=""
+	local Ss=""
 	if TotalKlingonShips>1 then Ss="S" end
 	telePrint("KLINGON"..Ss.." LEFT: "..TotalKlingonShips)
 	telePrint("MISSION MUST BE COMPLETED IN "..roundTo(T0+MaxNumOfDays-Stardate,1).." STARDATES")
 	
-	Ss=""
-	if TotalStarbases>1 then Ss="S" end
-
 	if TotalStarbases<1 then
 		telePrint("YOUR STUPIDITY HAS LEFT YOU ON YOUR ON IN")
 		telePrint("  THE GALAXY -- YOU HAVE NO STARBASES LEFT!")
 	else
+		Ss=""
+		if TotalStarbases>1 then Ss="S" end
 		telePrint("THE FEDERATION IS MAINTAINING "..TotalStarbases.." STARBASE"..Ss.." IN THE GALAXY")
 	end
 	DamageControl()
