@@ -124,23 +124,27 @@ function PrintElementOfMap(x,y)
 	return elem
 end
 
--- print full map for debug
+-- print full map and save it to file for debug
 function PrintFullMap()
+	mapfile = io.open("startrek.map", "w")
 	print(' '..string.rep(' -',72))
 	for i=1,64 do
 		io.write('|')
 		for j=1,64 do
+			mapfile:write(GlobalMap[i][j]..',')
 			local elem = PrintElementOfMap(i,j)
 			io.write(' '..elem:sub(2,2))
 			if j % 8 == 0 then io.write(' |') end
 		end
 		print()
+		mapfile:write("\n")
 		if i % 8 == 0 then print(' '..string.rep(' -',72)) end
 	end
 	EnergyLevel = 3000
 	for i=1,8 do
 		if DamageLevel[i]<0 then DamageLevel[i]=0 end
 	end
+	mapfile:close()
 	return true
 end
 
@@ -1695,7 +1699,7 @@ while (not GameOver) do
 		elseif Command == 'POS' then PhotonTorpedoData()
 		elseif Command == 'COM' then LibraryComputer()
 		elseif Command == 'MAP' then ComulativeGalacticRecord()
-		--elseif Command == 'DEB' then PrintFullMap()
+		elseif Command == 'DEB' then PrintFullMap()
 		--elseif Command == 'HAI' then Communication()
 		elseif Command == 'XXX' then GameOver = true
 		else
