@@ -1451,7 +1451,122 @@ function CourseControl()
 end
 
 
+function generate_galaxy_and_objects() 
 
+	ExploredSpace = {{},{},{},{},{},{},{},{}} -- A copy of Galaxy, but only with sectors explored/scanned
+
+	-- Initialize Global Map (coordinates of all the 64 sectors)
+	for i=1,64 do
+		GlobalMap[i] = {}
+		for j=1,64 do
+			GlobalMap[i][j] =0
+		end
+	end
+
+	-- Generate Stars
+	local Galaxy = {{},{},{},{},{},{},{},{}} -- used only during generation of map
+
+	for i=1,8 do
+		for j=1,8 do
+			local numOfStars = math.random(1,MaxStarsPerSector)
+			ExploredSpace[i][j]=0  -- hidden
+			Galaxy[i][j]=0  -- hidden
+			for s=1,numOfStars do
+				PlaceElementInSector(i,j,1001)	-- place a star in random coordinates of sector
+			end
+		end
+	end
+
+	-- Place and create Starbases
+	local addedBases =0
+	while addedBases<TotalStarbases do
+		local x,y=math.random(1,8),math.random(1,8)
+		if Galaxy[x][y] < 10 then					-- only if there are no starbases
+			addedBases = addedBases+1
+			Galaxy[x][y]= Galaxy[x][y] + 10
+			local bx,by = PlaceElementInSector(x,y,10+addedBases)	-- place a starbase in random coordinates of sector
+
+			local BaseName = "Starbase "..addedBases
+			local BaseEnergy = math.random(9000,15000)
+			AllStarbases[addedBases] = {x=bx,y=by,name=BaseName,energy=BaseEnergy}
+		end
+	end
+
+	-- Place Klingons
+	local addedKlingons =0
+	while addedKlingons<TotalKlingonShips do
+		local x,y=math.random(1,8),math.random(1,8)
+		if Galaxy[x][y] < 100 then					-- only if there are no klingons in this sector
+			R1=math.random(1,20)
+			local FleetSize = 1
+			if R1>18 then
+				FleetSize = 3
+			elseif R1>15 then
+				FleetSize = 2
+			end
+			if addedKlingons + FleetSize > TotalKlingonShips then
+				FleetSize = TotalKlingonShips - addedKlingons
+			end
+			Galaxy[x][y]= Galaxy[x][y] + FleetSize*100
+			
+			for k=1,FleetSize do
+				addedKlingons = addedKlingons+1
+				local kx,ky = PlaceElementInSector(x,y,100+addedKlingons)	-- place a klingon in random coordinates of sector
+				local KEnergy = KlingonBaseEnergy*(0.5+math.random())
+				table.insert(AllKlingons,{x=kx,y=ky,energy=KEnergy,name=table.remove(KlingonShipsNames)})
+			end
+		end	
+	end
+end
+
+function generate_new_game()
+	Stardate = 5943+math.random(1,1000) -- Stardate 5943 is the date of the last episode, the game starts after TOS
+	T0 = Stardate
+
+	-- generate no of bases and enemies
+	TotalStarbases=math.random(5,6)-DifficultyLevel
+	TotalKlingonShips=DifficultyLevel+10+math.random(DifficultyLevel*3,DifficultyLevel*6)
+	MaxNumOfDays = TotalKlingonShips + (2-DifficultyLevel)*math.random(3,9)+math.random(4,7)
+	KlingonBaseEnergy = KlingonBaseEnergy * 1+(DifficultyLevel/10*2)
+
+	-- init enterprise object
+
+	ShipDocked = false
+	EnergyLevel = MaxEnergyLevel
+	PhotonTorpedoes=MaxTorpedoes
+	ShieldLevel=0
+	ShipCondition = 'GREEN'
+
+	-- init other arrays
+
+	AllKlingons = {}
+	AllStarbases = {}
+	GlobalMap = {}
+	DamageLevel = {}
+
+	-- Set Damage level to 0 for all systems
+	for i=1,8 do
+		DamageLevel[i]=0
+	end
+
+	-- init galaxy
+	generate_galaxy_and_objects();
+
+
+	Q1,Q2 = math.random(1,8),math.random(1,8)
+
+	-- Place Enterprise in the Global Array, in a random free location of sector Q1,Q2
+	EntX,EntY = PlaceElementInSector(Q1,Q2,1)
+	-- 	ent_prev_sy,ent_prev_sx = 0,0
+	S1,S2,Q1b,Q2b = globalToLocalCoord(EntX,EntY)
+
+	if Q1b ~= Q1 or Q2b ~= Q2 then
+		die("Impossible - error calculating local from global")
+	end
+
+	-- Star the game with a mission recap
+	InitialKlingonShips=TotalKlingonShips
+end
 
 -- ************************************************************
 -- **    start of the program                                **
@@ -1483,129 +1598,15 @@ KlingonShipsNames = {"IKS Amar","IKS B'Moth","IKS Bortas","IKS Buruk","IKS Ch'Ta
 
 DeviceNames = {"WARP ENGINES","SHORT RANGE SENSORS","LONG RANGE SENSORS","PHASER CONTROL","PHOTON TUBES","DAMAGE CONTROL","SHIELD CONTROL","LIBRARY-COMPUTER"}
 
-AllKlingons = {}
-AllStarbases = {}
-
-ExploredSpace = {{},{},{},{},{},{},{},{}} -- A copy of Galaxy, but only with sectors explored/scanned
-DamageLevel = {}
-
-Stardate = 5943+math.random(1,1000) -- Stardate 5943 is the date of the last episode, the game starts after TOS
-T0 = Stardate
-
-ShipDocked = false
-
 -- Game Settings based on Difficulty level ---------------------------------
-DifficultyLevel = 2 -- number between 1 (easy) and 4 (very hard)
+DifficultyLevel = 3 -- number between 1 (easy) and 4 (very hard)
 
 MaxEnergyLevel = 3000	-- Enterprise max energy
 MaxTorpedoes=10
-KlingonBaseEnergy=200	-- Klingon ship energy range from 0.5x to 2x this value
-TotalStarbases=math.random(5,6)-DifficultyLevel
+KlingonBaseEnergy=160	-- Klingon ship energy range from 0.5x to 2x this value
 MaxStarsPerSector = 7
 
--- tot klingons = [14..17]  [18..24]  [22..31]  [26..38]
-TotalKlingonShips=DifficultyLevel+10+math.random(DifficultyLevel*3,DifficultyLevel*6)
-
--- default is [TotShips+5..TotShips+10]
-MaxNumOfDays = TotalKlingonShips + math.random(7-DifficultyLevel,14-DifficultyLevel*2)
-
-------------------------------------------------------------------------------
-
--- array C (CourseDelta) is the delta to Y and X determined by the course - last element (9) should be useless
-C = {{0,1},{-1,1},{-1,0},{-1,-1},{0,-1},{1,-1},{1,0},{1,1},{0,1}}
-
--- Set Damage level to 0 for all systems
-for i=1,8 do
-	DamageLevel[i]=0
-end
-
-EnergyLevel = MaxEnergyLevel
-PhotonTorpedoes=MaxTorpedoes
-ShieldLevel=0
-ShipCondition = 'GREEN'
-EntX,EntY = 1,1 -- position of the Enterprise in the global map
-
--- Initialize Global Map (coordinates of all the 64 sectors)
-GlobalMap = {}
-for i=1,64 do
-	GlobalMap[i] = {}
-	for j=1,64 do
-		GlobalMap[i][j] =0
-	end
-end
-
--- Generate Stars
-local Galaxy = {{},{},{},{},{},{},{},{}} -- used only during generation of map
-
-for i=1,8 do
-	for j=1,8 do
-		local numOfStars = math.random(1,MaxStarsPerSector)
-		ExploredSpace[i][j]=0  -- hidden
-		Galaxy[i][j]=0  -- hidden
-		for s=1,numOfStars do
-			PlaceElementInSector(i,j,1001)	-- place a star in random coordinates of sector
-		end
-	end
-end
-
--- Place and create Starbases
-local addedBases =0
-while addedBases<TotalStarbases do
-	local x,y=math.random(1,8),math.random(1,8)
-	if Galaxy[x][y] < 10 then					-- only if there are no starbases
-		addedBases = addedBases+1
-		Galaxy[x][y]= Galaxy[x][y] + 10
-		local bx,by = PlaceElementInSector(x,y,10+addedBases)	-- place a starbase in random coordinates of sector
-
-		local BaseName = "Starbase "..addedBases
-		local BaseEnergy = math.random(9000,15000)
-		AllStarbases[addedBases] = {x=bx,y=by,name=BaseName,energy=BaseEnergy}
-	end
-end
-
--- Place Klingons
-local addedKlingons =0
-while addedKlingons<TotalKlingonShips do
-	local x,y=math.random(1,8),math.random(1,8)
-	if Galaxy[x][y] < 100 then					-- only if there are no klingons in this sector
-		R1=math.random(1,20)
-		local FleetSize = 1
-		if R1>18 then
-			FleetSize = 3
-		elseif R1>15 then
-			FleetSize = 2
-		end
-		if addedKlingons + FleetSize > TotalKlingonShips then
-			FleetSize = TotalKlingonShips - addedKlingons
-		end
-		Galaxy[x][y]= Galaxy[x][y] + FleetSize*100
-		
-		for k=1,FleetSize do
-			addedKlingons = addedKlingons+1
-			local kx,ky = PlaceElementInSector(x,y,100+addedKlingons)	-- place a klingon in random coordinates of sector
-			local KEnergy = KlingonBaseEnergy*(0.5+math.random())
-			table.insert(AllKlingons,{x=kx,y=ky,energy=KEnergy,name=table.remove(KlingonShipsNames)})
-		end
-	end	
-end
-
--- no more used
-Galaxy = {}
-
--- REM INITIALIZE ENTERPRIZE'S POSITION
-Q1,Q2 = FNR(1),FNR(1)	-- initial sector of the Enterprise
-
--- Place Enterprise in the Global Array, in a random free location of sector Q1,Q2
-EntX,EntY = PlaceElementInSector(Q1,Q2,1)
-
-S1,S2,Q1b,Q2b = globalToLocalCoord(EntX,EntY)
-
-if Q1b ~= Q1 or Q2b ~= Q2 then
-	die("Impossible - error calculating local from global")
-end
-
--- Star the game with a mission recap
-InitialKlingonShips=TotalKlingonShips
+generate_new_game();
 
 --Captain's Log, stardate 4523.3. Deep Space Station K7 has issued a priority one call. More than an
 --emergency, it signals near or total disaster. We can only assume the Klingons have attacked the
